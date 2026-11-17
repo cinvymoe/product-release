@@ -1,0 +1,16 @@
+# 折臂吊 SPI ADC (AD7689 via Linux IIO) 配置 — 4 路在用通道
+# 与 loader/crane 的 SPI 配置分离部署, 勿合并
+[spi_adc]
+iio_device_path = "/sys/bus/iio/devices/iio:device0"
+# 物理接线: ch0 重量(轴销) / ch4 主臂水平夹角 / ch5 副臂(折臂)水平夹角 / ch6 臂长
+# ch1..ch3 备用未接
+channel_count = 8
+channel_interval_ms = 10
+data_timeout_ms = 100
+
+# 通道映射键名必须与 qt-app-folding acquisition_groups 注册表一致
+[spi_adc.channel_mapping]
+0 = "pin_force"
+4 = "main_boom_angle"
+5 = "fold_boom_angle"
+6 = "boom_length"

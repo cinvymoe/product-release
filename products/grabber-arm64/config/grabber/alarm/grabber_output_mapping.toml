@@ -1,0 +1,97 @@
+# 抓料机 报警 → 输出 默认映射表 (grabber-output-manager T8)
+#
+# 加载方: qt-app-grabber 启动时 `init_output_manager(config_dir)` →
+#         `OutputMapping::from_toml`; 运行期只读, 无热更新。
+# 路径:   <exe 同级>/config/grabber/alarm/grabber_output_mapping.toml
+#         (设备: /data/local/tmp/qt-rust-demo/config/grabber/alarm/grabber_output_mapping.toml)
+#
+# 语义 (D1 占用派生, 解析 schema 见 crates/grabber-output/src/mapping.rs):
+#   - safe_state 是期望态派生的基底, 也是正常/调试模式切换"先写安全态"的组合;
+#   - 报警活跃期 → 该条目 activate 通道置 ON、deactivate 通道置 OFF;
+#   - 激活优先于抑制: 任一活跃报警要求激活的输出, 不被其它报警的 deactivate 压制;
+#   - sound 为"应发声"语义; 抓料机声音链已接 SoundEngine (issue-df5010), 但它
+#     消费的是活跃报警集 (flow::latest_active_alarms), **不**消费本文件的 sound
+#     标志 (见 ADR-007 关联记录); 本标志只作语义声明保留;
+#   - 级别拼写错误 / 文件缺失 = 解析失败 → 输出管理降级为无输出 (fail-safe)。
+#
+# 动作继电器口径 (owner 2026-10-26 定案):
+#   - relay1 = 超载/断流动作继电器: 平时释放 (safe_state = false), 超载 Danger
+#     或进料断流 Critical 时吸合, 报警解除后随活跃集清空自动释放;
+#   - relay2 = 夹角动作继电器: 平时释放 (safe_state = false), 夹角 Danger
+#     时吸合, 解除后自动释放。
+#
+# 通道全集 (config/crane/alarm/alarm_output.toml, CAN 0x050 继电器板):
+#   relay1 / relay2 / normal_light / warning_light / alarm_light / buzzer
+#
+# ⚠️ 2026-10-27 起 grabber 已不再发送 CAN 0x050: 物理输出改为 CAN 0x380 报警状态帧
+#    (byte 0 重量报警 / byte 2 角度报警, 单字节 0/1/2, 500ms; 外部控制器驱动
+#    继电器板/灯/蜂鸣器)。本表保留为 OutputManager 内部状态与输出调试页的映射依据,
+#    `[safe_state]` / `activate` / `deactivate` 语义仍按下方说明生效, 但**不再驱动物理继电器**。
+
+[safe_state]
+# 安全态语义钉死:
+#   - relay1 / relay2 = false → 两路动作继电器平时释放, 吸合只由映射条目驱动
+#     (超载/断流 → relay1, 夹角 → relay2), 报警解除后自动释放;
+#   - 其余通道全 false → 声光熄灭 (normal_light 也熄灭, "安全"不等于"正常指示")。
+#
+# relay1 极性已定案 (原 T8 遗留确认项已结清): 常开动作 = 平时释放、报警吸合,
+# 0x050 板端 ON = 吸合。若现场接的是常闭回路, 属接线问题, 不再由配置兜底。
+relay1 = false
+relay2 = false
+normal_light = false
+warning_light = false
+alarm_light = false
+buzzer = false
+
+# 联锁通道清单: 调试旁路落库的真值记录范围 (T7 `debug_session_records`),
+# 与调试面板联锁标记。必须已在 safe_state 显式落表 (一致性测试固定)。
+[interlock_channels]
+channels = ["relay1"]
+
+# ── 载荷超载 (LoadOverloadChecker) ─────────────────────────────────────────
+#
+# owner 2026-10-26 口径: 超载报警接物理输出 —— Danger 级别吸合继电器1 (relay1),
+# 同时显式声明正常灯灭 (normal_light 在安全态已为 false, 此处与 sensor_fault 条目
+# 同形, 保持"报警时正常灯灭"语义); 报警解除后继电器随活跃集清空自动释放。
+# Warning 级别不落本映射条目: 预警只落存储/UI/声音 (声音走活跃集), 不驱动继电器
+# (仅 Danger 动作)。
+
+[[main.mapping]]
+source = "load_overload"
+level = "danger"
+activate = ["relay1"]
+deactivate = ["normal_light"]
+sound = true
+
+# ── 夹角越限 (AngleChecker) ────────────────────────────────────────────────
+#
+# 夹角报警接物理输出 —— Danger 级别吸合继电器2 (relay2), 解除后释放。
+# 本条目不写 deactivate: normal_light 在 [safe_state] 已为 false, 无需再抑制;
+# 超载条目保留 deactivate 只为与 sensor_fault 条目同形 (语义上均为空操作)。
+# 注: 夹角阈值 (config/grabber/grabber_alarm.toml [angle] warning_deg/danger_deg)
+#     为设备自治配置 (0/0 = 未启用; 阈值为 0 时本条目不触发, 属预期)。
+
+[[main.mapping]]
+source = "angle"
+level = "danger"
+activate = ["relay2"]
+sound = true
+
+# ── 传感器故障 / 断流 (SensorFaultChecker: stale 边沿直传 → Critical, D7) ──
+
+[[main.mapping]]
+# 断流联锁接管路径 (D7): CAN 进料中断 → SensorFault/Critical → 报警灯 +
+# 联锁 relay1 动作 (失效朝安全侧, 不基于过期数据放行动作); 正常灯灭; 发声。
+# 断流恢复后 AlarmStage 按既有 SensorFault 解除路径清除, 输出按活跃集派生自动恢复。
+source = "sensor_fault"
+level = "critical"
+activate = ["alarm_light", "relay1"]
+deactivate = ["normal_light"]
+sound = true
+
+# 注: 当前 SensorFaultChecker 仅产出 Critical (crates/grabber-pipeline-application/
+#     src/alarm/checkers.rs), 不产出 sensor_fault/warning, 故无该级别条目;
+#     若后续引入传感器预警级别, 在此补 warning_light 映射。
+#
+# 注: output_fault (输出故障) 来源键被映射层显式拒绝 (递归切断第一道防线),
+#     禁止加入本文件——输出故障只走 Log/UI/SQL, 永不驱动物理输出。

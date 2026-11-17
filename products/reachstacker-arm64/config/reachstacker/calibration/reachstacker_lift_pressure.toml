@@ -1,0 +1,9 @@
+# legacy: 正面吊进油（举升侧）油压两点标定 (历史文件), 物理单位 MPa。
+# `CalibrationSet` 仍加载本文件以保持文件/桥回退兼容, 但压力换算不读它:
+# 压力按 loader range 映射 (AD 13000→0, AD 65535→[cylinder].range MPa)。
+[calibration]
+zero_ad = 13000
+zero_value = 0.0
+scale_ad = 65535
+scale_value = 40.0
+calibrated = false

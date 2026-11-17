@@ -1,0 +1,13 @@
+# 正面吊继电器报警输出逻辑 (CAN 0x050 继电器板)
+# alarm_output_value: 报警时继电器字节输出值 (0 或 1); 正常状态自动输出相反值。
+# heartbeat: 周期重发当前期望态帧, 防继电器板看门狗/丢帧 (0x050 心跳)。
+
+[moment]
+alarm_output_value = 1
+
+[angle]
+alarm_output_value = 1
+
+[heartbeat]
+enabled = true
+interval_ms = 2000

@@ -1,0 +1,32 @@
+# 油压汽车吊输出映射 (出厂): 安全态 + 报警→输出规则 (基线来自 alarm-core DEFAULT_MAPPING_TOML；本产品追加 hook_interlock 第 4 条)
+[safe_state]
+relay1 = false
+relay2 = false
+normal_light = true
+warning_light = false
+alarm_light = false
+alarm_sound = false
+
+[[mapping]]
+source = "load_overload"
+level = "warning"
+activate = ["warning_light", "relay2", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "load_overload"
+level = "danger"
+activate = ["alarm_light", "relay1", "relay2", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "sensor_fault"
+level = "critical"
+activate = ["alarm_light", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "hook_interlock"
+level = "critical"
+activate = ["relay1", "alarm_light", "alarm_sound"]
+deactivate = ["normal_light"]

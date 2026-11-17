@@ -1,0 +1,113 @@
+# 抓料机管道配置 (grabber pipeline, 按组多 raw pipeline)
+#
+# [database].path: SQLite 文件路径 (/userdata 大分区, 23G; rootfs 仅 1.1G);
+# [storage].enabled: 全局总开关 (false = 仅采集不持久化, 不启动任何 writer);
+# [[group]]: 每组一节, name 须在注册表 (groups.rs: main / vehicle / status),
+#   未注册名记 error 跳过该组, 重复名仅保留第一个。
+# 修改后重启生效。
+
+# ========== 数据库配置 ==========
+[database]
+# SQLite 文件路径: 放 /userdata 大分区 (23G, 与 rootfs 1.1G 隔离)。
+# 采集/标定库持续增长 (processed 30 天滚动 ≈ 数百万行), 放 rootfs 会写满
+# 导致「标定数据库不可用」(2026-10-27 现场实发, rootfs 100% → SQLite
+# "database or disk is full" → 标定 store 打开失败)。
+# 同一文件多连接 (每组独立 Connection, WAL 并发写); 附属 -wal/-shm
+# 随 pull-db 一并拉取, 否则快照可能缺最新缓冲数据。
+path = "/userdata/qt-rust-demo/grabber_data.db"
+
+# ========== 存储总开关 ==========
+[storage]
+# 是否启用 SQLite 存储 (false = 仅采集不持久化, 不启动任何 writer)
+# 注: 旧单组字段 batch_size/flush_interval_secs/max_rows 已废弃 — 值已按组
+# 下沉到下方 [[group]], 本节写了也不生效; 仅 enabled 仍为全局总开关。
+enabled = true
+# 是否把 raw 组样本落盘 (grabber_raw_data / grabber_vehicle_raw_data)。
+# false (缺省) = 只落 process 数据 (grabber_processed_data) + 称重/报警记录;
+#   采集、滤波、称重/vehicle 链照常运行 (管道以仅广播模式装配, 只停持久化)。
+# true = 恢复旧行为 (raw 表按 [[group]] max_rows 滚动保留)。
+persist_raw = false
+
+# ========== 主组: 2 压力 + 4 角度/倾角 @10ms ==========
+[[group]]
+name = "main"
+# 采集周期 ms (main 注册表缺省 10)
+interval_ms = 10
+# 断流判定阈值 ms (缺省 = 10×interval_ms = 100ms; 0 非法回退缺省并记 warn;
+# 样本时间域判洞 + wall-clock 看门狗共享)
+# stale_timeout_ms = 100
+# 批量刷盘大小: 缺省 max(1, 1000/interval_ms) ≈ 1 秒数据量 (10ms → 100 条)
+batch_size = 100
+# 定时落盘秒数（缓冲非空且距上次落盘 ≥ 该秒数即落盘）
+flush_interval_secs = 5
+# 行数上限保留: grabber_raw_data 最多保留 100,000 行 ≈ 100000×10ms ≈ 16 分钟
+# (0 = 禁用清理), 超出部分由 writer 启动时 + 每小时自动清理
+# (按 id 保留最新插入的行, 跨重启安全)。
+# 仅在 [storage].persist_raw = true 时生效 (缺省 false: raw 表不写)。
+max_rows = 100000
+
+# ========== 车载组: 回转角度 @100ms ==========
+[[group]]
+name = "vehicle"
+# 采集周期 ms (非 main 组注册表缺省 100)
+interval_ms = 100
+# 断流判定阈值 ms (缺省 = 10×interval_ms = 1000ms; 0 非法回退缺省并记 warn)
+# stale_timeout_ms = 1000
+# batch_size 缺省 ≈ 1 秒数据量 (100ms → 10 条), 此处省略即生效 10
+# 定时落盘秒数（缓冲非空且距上次落盘 ≥ 该秒数即落盘）
+flush_interval_secs = 5
+# 行数上限保留: grabber_vehicle_raw_data 最多保留 100,000 行 ≈ 100000×100ms ≈ 2.8 小时
+# (0 = 禁用清理); 仅在 [storage].persist_raw = true 时生效。
+max_rows = 100000
+
+# ========== status 组: 0x480 五路传感器状态 @100ms ==========
+[[group]]
+name = "status"
+# 采集周期 ms (非 main 组注册表缺省 100)
+interval_ms = 100
+# 断流判定阈值 ms (缺省 = 10×interval_ms = 1000ms; 0 非法回退缺省并记 warn)
+# stale_timeout_ms = 1000
+# batch_size 缺省 ≈ 1 秒数据量 (100ms → 10 条), 此处省略即生效 10
+# 定时落盘秒数（缓冲非空且距上次落盘 ≥ 该秒数即落盘）
+flush_interval_secs = 5
+# 行数上限保留: grabber_sensor_status 最多保留 100,000 行 ≈ 100000×100ms ≈ 2.8 小时
+# (0 = 禁用清理); 仅在 [storage].persist_raw = true 时生效 (缺省 false 只广播)。
+max_rows = 100000
+
+# ========== 滤波配置 ==========
+[filter]
+# 中值滤波窗口长度（去单帧毛刺，默认 5；仅 vehicle 链使用，
+# main 称重链自 T1.2 起改用下方 EMA）
+median_window = 5
+
+# 滑动均值窗口长度（平滑，默认 10；仅 vehicle 链使用）
+average_window = 10
+
+# ── main 称重链 EMA α 三层配置 (10ms 采样) ─────────────────────
+# 解析优先级: 单通道覆盖 (alpha_inlet/.../alpha_roll) → 分组 (压力/角度)
+# → 全局 (ema_alpha); 非法值逐级回退 (非有限/≤0 回退下一层, >1 取 1.0),
+# 每次清洗记 warn; α=1.0 为恒等透传 (测试夹具用)。
+# 全局兜底 α (默认 0.25)
+ema_alpha = 0.25
+# 压力组 (inlet/return) α (默认 0.2, 10ms 下 ≈40ms 等效窗)
+ema_alpha_pressure = 0.2
+# 角度/倾斜组 (stick/boom/pitch/roll) α (默认 0.3)
+ema_alpha_angle = 0.3
+# 单通道覆盖（可选，缺省即用分组值）：
+# alpha_boom = 0.5
+# 折臂通道（历史列 pitch_tilt_ad）跨 ±180 回绕时，EMA 会把 360° 台阶平滑成
+# 0.2~0.3s 的假角度扫掠，导致夹角/负荷率/重量跳变；此处先关闭该通道滤波
+# （α=1.0 恒等透传），主臂/压力/底盘仍按分组 α 滤波。标定若在临界点附近
+# 进行，建议临时恢复 α=0.3 或改用解回绕实现（待后续）。
+alpha_pitch = 1.0
+
+# ========== 大臂夹角仪表 (AngleGauge, 可选) ==========
+# 现场核实机器安全作业区间后填写; 三项必须齐全才生效 (缺省/非法 = 未配置)。
+# 未配置时主控制台夹角仪表只显示实际夹角与开度, 不画安全色带、不显示极限制动
+# 文案 (近伸直姿态夹角可达 ~170°, 缺省不做判定即不会误报超限)。
+# 安全区间属现场知识, 发布配置不预填数值; max_deg 为仪表满量程 (仅开度显示用)。
+# 修改后重启生效 (启动时注入 MainViewModel)。
+# [angle_gauge]
+# max_deg = <仪表满量程°>
+# safe_min_deg = <安全作业区间下限°>
+# safe_max_deg = <安全作业区间上限°>

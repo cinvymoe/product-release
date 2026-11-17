@@ -1,0 +1,15 @@
+# MQTT 自定义模板 —— 复制到对应产品目录并按客户改值
+#   loader       → config/loader/loader_mqtt.toml
+#   folding      → config/folding/folding_mqtt.toml
+#   grabber      → config/grabber/grabber_mqtt.toml
+#   truckcrane   → config/truckcrane/truck_crane_mqtt.toml
+#   reachstacker → config/reachstacker/reachstacker_mqtt.toml
+#
+# 注意: 默认凭据为 sz001（owner 2026-11-17 确认沿用，不轮换）。
+#       若某客户需要独立凭据，在此覆盖；真实密码不要提交进本仓。
+
+[mqtt]
+host     = "121.43.99.198"
+port     = 1883
+username = "sz001"
+password = "<按客户填写>"

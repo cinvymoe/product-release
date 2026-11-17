@@ -1,0 +1,52 @@
+# 正面吊 (reach stacker) 采集管道配置
+# 数据源 = 旧正面吊固定三帧 CAN (0x280 压力 / 0x180 位置 / 0x480 状态, ADR-029)。
+# 大臂可伸缩: 4 路通道 = 大臂角 + 大臂长度 + 进/回油压力 (0x180 带角度与臂长)。
+# 臂长两点标定见 calibration/reachstacker_boom_length.toml; 臂长通道失效即判该路无效 (fail-closed)；[vehicle].l_m 为历史默认值，不参与回退。
+# 修改后重启生效。
+
+[data_source]
+type = "hardware"          # "mock" | "hardware"
+can_config = "sensors/can_config.toml"   # 可选覆盖, 相对 <exe_dir>/config/reachstacker/
+
+[collection]
+interval_ms = 50
+initial_sequence = 0
+
+[retry]
+max_retries = 5
+retry_delay_ms = 200
+
+[database]
+path = "/userdata/qt-rust-demo/reachstacker_data.db"
+production_dir = "/userdata/qt-rust-demo/production"
+
+[storage]
+enabled = true         # 已失效 (dead key, 仅解析兼容): 落库由采集会话热挂载控制
+
+[storage.raw]
+enabled = false        # 已失效——采集会话热挂载控制 (键保留仅为解析兼容)
+batch_size = 100
+flush_interval_secs = 5
+max_rows = 100000
+
+[storage.filtered]
+enabled = false        # 已失效——采集会话热挂载控制 (键保留仅为解析兼容)
+batch_size = 100
+flush_interval_secs = 5
+max_rows = 100000
+
+[filter]
+ema_alpha = 0.25       # 全局兜底 α
+# 单通道覆盖 (键名 = 采集注册表通道键, 声明序)
+alpha_main_boom_angle = 0.25
+alpha_boom_length = 0.25
+alpha_lift_pressure = 0.3
+alpha_rod_pressure = 0.3
+
+[process]
+interval_ms = 100
+max_rows = 518400
+persist_interval_ms = 5000
+
+[alarm_storage]
+max_rows = 10000

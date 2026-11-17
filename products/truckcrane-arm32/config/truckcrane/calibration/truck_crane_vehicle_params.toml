@@ -1,0 +1,23 @@
+# 油压汽车吊车身参数与变幅油缸标定（单文件两表，保存任一组时保留另一组）。
+# Z = 主臂铰点 b 到回转中心 O 的水平距离（可负）；H = b 点高度；L = 主臂基准长度。
+# 后续 process stage 使用 Z/H/L 计算单伸缩臂幅度与高度，单位均为米。
+[vehicle]
+z_m = 0.0
+h_m = 0.0
+l_m = 0.0
+# 最小/最大臂长（米）：0/0 = 未配置，主界面臂架全缩；有效值要求 0 < 最小 < 最大。
+min_boom_length_m = 0.0
+max_boom_length_m = 0.0
+
+# 油缸铭牌：count 为缸数；diameter_cylinder / diameter_rod 单位 mm；range 单位 MPa。
+# 铰点几何（单位 m，随主臂角解算力臂）：B=cylinder_height_diff，
+# C=cylinder_lower_horizontal，E=cylinder_upper_horizontal。
+# 全零 + count=0 是待标定占位，不代表实机尺寸；有效保存要求参数完整。
+[cylinder]
+count = 0
+diameter_cylinder = 0.0
+diameter_rod = 0.0
+range = 0.0
+cylinder_height_diff = 0.0
+cylinder_lower_horizontal = 0.0
+cylinder_upper_horizontal = 0.0

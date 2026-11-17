@@ -1,0 +1,46 @@
+# 正面吊输出映射 (出厂): 安全态 + 报警→输出规则
+# 基线来自 alarm-core DEFAULT_MAPPING_TOML; 本产品把旧 crane 的 moment/angle/load_overload
+# 三路告警收敛为 load_overload(力矩百分比)/angle_out_of_range, 断流走 sensor_fault。
+[safe_state]
+relay1 = false
+relay2 = false
+normal_light = true
+warning_light = false
+alarm_light = false
+alarm_sound = false
+
+[[mapping]]
+source = "load_overload"
+level = "warning"
+activate = ["warning_light", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "load_overload"
+level = "danger"
+activate = ["alarm_light", "relay1", "relay2", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "angle_out_of_range"
+level = "warning"
+activate = ["warning_light", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "angle_out_of_range"
+level = "danger"
+activate = ["alarm_light", "relay1", "relay2", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "sensor_fault"
+level = "critical"
+activate = ["alarm_light", "relay1", "relay2", "alarm_sound"]
+deactivate = ["normal_light"]
+
+[[mapping]]
+source = "calibration_incomplete"
+level = "warning"
+activate = ["warning_light"]
+deactivate = ["normal_light"]

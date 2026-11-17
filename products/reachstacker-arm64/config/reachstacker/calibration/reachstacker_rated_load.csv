@@ -1,0 +1,15 @@
+# 正面吊 (reachstacker) 额定载荷表 — legacy 2 列兼容件
+#
+# 新架构主数据源为 reachstacker_load_charts.toml (schema v2, 按臂长分行)。
+# 本文件仅作为旧 CSV 读取路径的兜底: 不可伸缩大臂 → 固定臂长 15.0 m,
+# 因此只迁移旧 rated_load_table.csv 中 boom_length_m=15.0 的一行,
+# 幅度 = 15.0 × cos(臂角), 按幅度升序。
+#
+# 幅度单位: m; 额定载荷单位: t
+amplitude_m,load_ton
+8.1689,52.0
+10.2295,52.0
+11.3214,42.0
+12.2872,32.0
+13.3653,26.0
+13.7034,21.0

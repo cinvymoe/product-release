@@ -1,0 +1,53 @@
+# 折臂吊采集管道配置
+# raw/filtered 双管道常驻采集 (滤波计算 + 内存广播); 落库由「采集会话」热挂载控制:
+# 默认不写 folding_raw_data/folding_filtered_data, 开始采集后写入会话文件。
+# 修改后重启生效。
+
+[data_source]
+type = "hardware"          # "mock" | "hardware"
+# spi_config = "sensors/folding_spi_adc_config.toml"   # 可选覆盖, 相对 <exe_dir>/config/
+
+[collection]
+interval_ms = 50
+initial_sequence = 0
+# stale_timeout_ms 可选: 断流看门狗阈值; 缺省/0 = 10 × interval_ms (=100ms)。
+# stale_timeout_ms = 100
+
+[retry]
+max_retries = 5
+retry_delay_ms = 200
+
+[database]
+path = "/var/lib/qt-rust-demo/folding_data.db"      # 常驻表 (folding_processed 等)
+production_dir = "/var/lib/qt-rust-demo/production" # 采集会话文件目录 (开始采集时自动创建)
+
+[storage]
+enabled = true         # 已失效 (dead key, 仅解析兼容): 落库由采集会话热挂载控制
+
+[storage.raw]          # 采集管道: 会话文件 folding_raw_data
+enabled = false        # 已失效——采集会话热挂载控制 (键保留仅为解析兼容)
+batch_size = 100
+flush_interval_secs = 5
+max_rows = 100000      # 0 = 禁用清理
+
+[storage.filtered]     # 滤波管道: 会话文件 folding_filtered_data
+enabled = false        # 已失效——采集会话热挂载控制 (键保留仅为解析兼容)
+batch_size = 100
+flush_interval_secs = 5
+max_rows = 100000
+
+[filter]
+ema_alpha = 0.25       # 全局兜底 α
+# 单通道覆盖 (可选, 缺省用全局值):
+# alpha_main_boom_angle = 0.3
+# alpha_fold_boom_angle = 0.3
+# alpha_boom_length = 0.25
+# alpha_pin_force = 0.5
+
+[process]               # process stage: AD→物理换算 → 两段臂几何 → 落库 folding_processed
+interval_ms = 100       # process 快照周期 (订阅 filtered 广播, 10Hz)
+max_rows = 518400       # folding_processed 行数上限; 0 = 禁用清理 (30 天 @ 5s/行, ≈57 MB)
+persist_interval_ms = 5000  # 落库节奏; 0=每 tick; UI 快照仍 100ms
+
+[alarm_storage]         # 报警区间记录: Trigger INSERT / Clear 回填 → 表 folding_alarm_records
+max_rows = 10000        # 报警表行数上限 (活跃行豁免; 活跃数 ≥ max_rows 时跳过本次清理); 缺省 10000

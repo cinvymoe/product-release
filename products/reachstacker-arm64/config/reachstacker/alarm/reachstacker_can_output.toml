@@ -1,0 +1,63 @@
+# 正面吊 CAN 0x050 继电器板输出配置 (issue-ebb79b: 输出走 CAN, 非 GPIO)
+#
+# 帧格式: 标准帧 0x050 (80), 8 字节, 每路输出占 1 字节:
+#   byte0=继电器1(载荷)  byte1=继电器2(角度)  byte2=正常灯
+#   byte3=预警灯        byte4=报警灯         byte5=蜂鸣器
+# 每路 on_value/off_value 为物理电平; relay1/relay2 的"报警输出值"另由
+# reachstacker_alarm_relay_output.toml 的 [moment]/[angle].alarm_output_value 决定
+# (1=报警高电平, 0=报警低电平; 空闲取反), 与旧正面吊实现一致。
+interface = "can0"
+
+[relay1]
+name = "继电器1-载荷"
+can_id = 80
+byte_index = 0
+on_value = 1
+off_value = 0
+frame_data = [0, 0, 0, 0, 0, 0, 0, 0]
+enabled = true
+
+[relay2]
+name = "继电器2-角度"
+can_id = 80
+byte_index = 1
+on_value = 1
+off_value = 0
+frame_data = [0, 0, 0, 0, 0, 0, 0, 0]
+enabled = true
+
+[normal_light]
+name = "正常灯"
+can_id = 80
+byte_index = 2
+on_value = 1
+off_value = 0
+frame_data = [0, 0, 0, 0, 0, 0, 0, 0]
+enabled = true
+
+[warning_light]
+name = "预警灯"
+can_id = 80
+byte_index = 3
+on_value = 1
+off_value = 0
+frame_data = [0, 0, 0, 0, 0, 0, 0, 0]
+enabled = true
+
+[alarm_light]
+name = "报警灯"
+can_id = 80
+byte_index = 4
+on_value = 1
+off_value = 0
+frame_data = [0, 0, 0, 0, 0, 0, 0, 0]
+enabled = true
+
+[buzzer]
+name = "报警器"
+can_id = 80
+byte_index = 5
+on_value = 1
+off_value = 0
+frame_data = [0, 0, 0, 0, 0, 0, 0, 0]
+enabled = true

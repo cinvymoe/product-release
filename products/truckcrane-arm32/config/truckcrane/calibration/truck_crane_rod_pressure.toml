@@ -1,0 +1,11 @@
+# legacy：油压汽车吊有杆腔（回油侧）油压两点标定（历史文件），物理单位 MPa。
+# `CalibrationSet` 仍加载本文件以保持文件/桥回退兼容，但压力换算与有效门不再读取：提升/有杆腔压力按 loader range 映射
+# （AD 13000→0、AD 65535→[cylinder].range 压力传感器量程 MPa），本文件不参与压力显示，
+# 也不阻塞压力有效门。zero/scale/calibrated 键仅为兼容保留（标定桥 load/save 入口保留回退），
+# 出厂全零且 calibrated=false，不代表任何实机油压或量程；手改仅限恢复出厂。
+[calibration]
+zero_ad = 0
+zero_value = 0.0
+scale_ad = 0
+scale_value = 0.0
+calibrated = false

@@ -1,0 +1,13 @@
+# 声音输出配置 (issue-3f9a2c)
+#
+# backends: 启用的声音后端列表 —— aplay | pwm
+#   aplay = 走板载声卡 (rk809 codec), 播放 sounds_dir 下的 wav; 本板唯一可用的
+#           蜂鸣器/报警音通道 (GPIO2_B5 / pin 77 被蓝牙 UART RTS 占用, pwm 不可用)。
+#   pwm   = 走 GPIO 软 PWM 蜂鸣器, 引脚与频率见同目录 buzzer.toml。
+#           保留为可选后端: 现场若改用未占用引脚, 在此加回 "pwm" 即可。
+# sounds_dir: wav 资源目录 (部署链 scripts/deploy-reachstacker.sh 会把
+#             qml/assets/sounds/*.wav 推到该目录)
+#
+# 缺失本文件时程序会按上面的默认值自动生成; 文件损坏时回退默认值且不覆盖现场文件。
+backends = ["aplay"]
+sounds_dir = "/data/local/tmp/qt-rust-demo/qml/assets/sounds"

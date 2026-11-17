@@ -1,0 +1,41 @@
+# 抓料机动态称重配置 (grabber weighing)
+#
+# 角度窗 [theta_low_deg, theta_high_deg] 仅作称重样本质量门: 窗内有效样本
+# 入判重缓冲; 缓冲样本的折臂角极差 ≥ fold_still_threshold_deg 时整斗判废
+# (fold_moved); 循环起止由重量包络 (0→≥start→≤end) 决定,
+# 阈值在 config/grabber/sensors/grabber_sensor_calibration.toml [cycle]。
+#
+# 历史记录: 自 2026-10-27 起 grabber_weighing_records **改为定周期记录当下
+# 瞬时重量** (见 record_interval_ms), 与「出一斗」判重完全解耦 —— 出斗判重
+# 只驱动内存累计/斗数与日志, 不再决定落库时机。未标定 (weight_valid=false)
+# 时重量列写 0.00、载荷率记 0%, 额定/高度/幅度照算。
+# 修改后重启生效
+
+# 样本入判重缓冲的角度下界 (度): 主臂角在 [theta_low_deg, theta_high_deg]
+# 内的有效样本才入缓冲; 角度窗 [10,75] 仅作样本质量门, 循环起止由重量包络决定
+theta_low_deg = 10.0
+
+# 样本入判重缓冲的角度上界 (度): 不是关斗条件 — 循环起止由重量包络决定
+# (见头部说明与传感器标定 [cycle] 段)
+theta_high_deg = 75.0
+
+# 折臂静止阈值 (度):采集期间折臂角极差 (max−min) ≥ 此值即丢弃本斗 (fold_moved)
+fold_still_threshold_deg = 0.5
+
+# 最小有效样本数:窗内 weight_valid 样本数低于此值即丢弃 (insufficient_samples)
+min_samples = 30
+
+# 样本方差上限 (总体方差 t²):超过即丢弃 (variance_exceeded)
+variance_threshold = 0.0025
+
+# 最小斗重 (吨):截尾均值低于此值即丢弃 (below_min_weight)
+min_weight_t = 0.05
+
+# 期望窗口容量 (个):采集缓冲 Vec 不设硬上限,随窗口长度自然增长;
+# 本值记录期望容量供配置核对 (默认 50,对应 10ms 周期约 35° 窗宽)
+buffer_size = 50
+
+# 历史记录落库周期 (毫秒): 每隔此间隔把当下瞬时重量写一条
+# grabber_weighing_records 记录 (默认 5000 = 每 5s 一条)。
+# 0 = 每个样本都记 (仅测试用, 生产勿设)。改后重启生效。
+record_interval_ms = 5000

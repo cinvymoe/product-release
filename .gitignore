@@ -3,3 +3,7 @@
 !/artifacts/.gitkeep
 !/artifacts/MANIFEST.sha256
 !/artifacts/*.example
+
+# 客户自定义实例不入 git (只留模板)
+/custom/*
+!/custom/example/

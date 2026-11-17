@@ -1,0 +1,131 @@
+# 抓料机 CAN 采集配置 (grabber-can-io)
+#
+# 协议口径 (2026-09-14 现场核实修正; change: grabber-angle-signal-semantics):
+#   帧 0x180 = 4 路 2 字节小端 **有符号整数度** (1°/单位):
+#     byte 0..2 主臂角 | byte 2..4 折臂角 | byte 4..6 前后倾 | byte 6..8 左右倾
+#     0 = 该臂/轴垂直; 臂越低值越大; 越过垂直为负 (实测越垂直 68° = −68)。
+#   帧 0x280 = 进油/回油压力 AD (2 字节小端 u16)。
+#
+#   角度换算 (处理层): θ = θ_ref + (raw − ad_ref) × k
+#     缺省 k = −1、θ_ref = 90°、ad_ref = 0 (有符号原始值) → θ = 90 − raw,
+#     见 sensors/grabber_sensor_calibration.toml [angle] 与 grabber_calibration.toml。
+#   ⚠ 通道键 (= 本文件节名) 与落库列名解耦: 键为现场具名, 列名保留历史名
+#     (零 DB 迁移), 映射钉死在代码 groups.rs:
+#       main_boom_angle → boom_angle_ad     (byte 0..2, 处理层 θ_main)
+#       fold_boom_angle → pitch_tilt_ad     (byte 2..4, 处理层 θ_fold)
+#       pitch_tilt      → stick_angle_ad    (byte 4..6, 底盘倾角显示)
+#       roll_tilt       → roll_tilt_ad      (byte 6..8, 未进重量链)
+#   四路角度/倾角通道 **必须 signed = true** (2 字节符号扩展 → 负值; 缝投影
+#     有符号直通, 无任何偏置)。压力 AD → MPa 两点映射未变。
+#
+# 协议变更只改本文件, 无需改代码 (代码中禁止硬编码帧 ID)。
+#
+# 通道映射: 6 路 main 组 (2 压力 + 4 角度/倾斜)。
+# 每通道默认 2 字节小端 (byte_len / little_endian 缺省即可, 此处省略)。
+# 回转角度通道 (vehicle 组, 32-bit) 协议后续补定, 配置先注释占位;
+# 代码中 vehicle 组注册表保留, 配置可裁剪。
+#
+# 另: 5 路 status 组 (0x480 传感器状态位, issue-4c71b8):
+#   每路 1 字节无符号, 0 = 该路传感器离线 / 非 0 = 在线; 只供主界面
+#   「传感器状态」五灯与五路掉线报警 (grabber_sensor_status 组), 不进
+#   称重链; 组级帧超时 1000ms (状态帧 100ms 周期, 1s 未收判整帧超时)。
+
+[can]
+# CAN 接口名 (生产: can0, 开发验证: vcan0)
+interface = "can0"
+# socket 读超时 (ms)
+read_timeout_ms = 100
+# 每通道帧超时 (ms): 超过此时长未收到该通道帧判离线 (<通道名>_online=false)
+data_timeout_ms = 3000
+
+# 进油压力 AD: 0x280 byte 0..2 (u16)
+[can.channels.inlet_pressure_ad]
+can_id = 0x280
+byte_offset = 0
+
+# 回油压力 AD: 0x280 byte 2..4 (u16)
+[can.channels.return_pressure_ad]
+can_id = 0x280
+byte_offset = 2
+
+# 主臂角: 0x180 byte 0..2 (有符号整数度, 0=垂直) → 处理层 θ_main
+[can.channels.fold_boom_angle]
+can_id = 0x180
+byte_offset = 0
+signed = true
+
+# 折臂角: 0x180 byte 2..4 (有符号整数度, 0=垂直) → 处理层 θ_fold
+[can.channels.main_boom_angle]
+can_id = 0x180
+byte_offset = 2
+signed = true
+
+# 前后倾斜: 0x180 byte 4..6 (有符号整数度; 仅底盘倾角显示, 不进重量公式)
+[can.channels.pitch_tilt]
+can_id = 0x180
+byte_offset = 4
+signed = true
+
+# 左右倾斜: 0x180 byte 6..8 (有符号整数度; 当前未参与重量链)
+[can.channels.roll_tilt]
+can_id = 0x180
+byte_offset = 6
+signed = true
+
+# 回转角度 AD (vehicle 组): 协议后续补定, 先注释占位
+# [can.channels.slew_angle_ad]
+# can_id = 0x2C0
+# byte_offset = 0
+# byte_len = 4
+# group = "vehicle"
+
+# 车载组级帧超时: 车载慢帧, 500ms 未收判离线 (随 slew 通道一并注释)
+# [can.groups.vehicle]
+# data_timeout_ms = 500
+
+# ========== status 组: 0x480 五路传感器状态位 @100ms ==========
+# 帧 0x480 = 5 字节状态位 (byte 0..4), 每路 1 字节无符号:
+#   0 = 该路传感器离线 / 非 0 = 在线。
+# 顺序与 SensorStatusSnapshot::flags() / 五灯顺序一致:
+#   byte 0 进油压力 | byte 1 回油压力 | byte 2 斗杆角度 | byte 3 动臂角度 | byte 4 车身角度
+# 解码后经 grabber_sensor_status 组表落库列名与通道键同名 (列名 = 键名, 无历史名)。
+
+# 进油压力传感器状态: 0x480 byte 0
+[can.channels.inlet_pressure_online]
+can_id = 0x480
+byte_offset = 0
+byte_len = 1
+group = "status"
+
+# 回油压力传感器状态: 0x480 byte 1
+[can.channels.return_pressure_online]
+can_id = 0x480
+byte_offset = 1
+byte_len = 1
+group = "status"
+
+# 斗杆角度传感器状态: 0x480 byte 2
+[can.channels.stick_angle_online]
+can_id = 0x480
+byte_offset = 2
+byte_len = 1
+group = "status"
+
+# 动臂角度传感器状态: 0x480 byte 3
+[can.channels.boom_angle_online]
+can_id = 0x480
+byte_offset = 3
+byte_len = 1
+group = "status"
+
+# 车身角度传感器状态: 0x480 byte 4
+[can.channels.chassis_angle_online]
+can_id = 0x480
+byte_offset = 4
+byte_len = 1
+group = "status"
+
+# 状态组级帧超时: 状态帧 100ms 周期, 1s 未收判该组通道离线
+[can.groups.status]
+data_timeout_ms = 1000
+

@@ -1,0 +1,45 @@
+# 折臂吊 GPIO 输出配置 — 6 通道实机引脚 (2026-09-24 填入, 实测验证)
+# relay1=报警控制(超载联锁) / relay2=预警控制(预警联动) / normal/warning/alarm 灯 / alarm_sound=报警声音
+# 注意: 应用在本文件缺失时会自动生成"6 通道全禁用占位"(gpio_output_port.rs PLACEHOLDER_TOML),
+#       占位与本实机文件不同属预期 (占位=安全回退, 本文件=真实引脚)。
+[relay1]
+# 报警控制 (超载联锁) — GPIO2_B0
+chip = "/dev/gpiochip2"
+pin = 8
+active_low = true
+enabled = true
+
+[relay2]
+# 预警控制 (预警联动) — GPIO3_B5
+chip = "/dev/gpiochip3"
+pin = 13
+active_low = true
+enabled = true
+
+[normal_light]
+# 正常灯 — GPIO3_A6
+chip = "/dev/gpiochip3"
+pin = 6
+active_low = true
+enabled = true
+
+[warning_light]
+# 预警灯 — GPIO2_C0
+chip = "/dev/gpiochip2"
+pin = 16
+active_low = true
+enabled = true
+
+[alarm_light]
+# 报警灯 — GPIO2_B7
+chip = "/dev/gpiochip2"
+pin = 15
+active_low = true
+enabled = true
+
+[alarm_sound]
+# 报警声音 — GPIO2_B6
+chip = "/dev/gpiochip2"
+pin = 14
+active_low = true
+enabled = true

@@ -2,7 +2,7 @@
   "product": "qt-app-loader",
   "arch": "arm32",
   "version": "1.0.6",
-  "timestamp": "2026-11-17T09:02:44.821575+00:00",
+  "timestamp": "2026-11-17T09:05:00.803612+00:00",
   "runtime_root": "artifacts/products/loader-arm32/runtime",
   "files": [
     {

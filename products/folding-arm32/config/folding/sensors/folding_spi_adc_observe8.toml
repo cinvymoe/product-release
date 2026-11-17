@@ -1,0 +1,16 @@
+# 折臂吊 SPI ADC 8 通道全观察配置 — 仅供 continuous 观察调试用, 不参与生产管线。
+# 生产管线认 sensors/folding_spi_adc_config.toml (4 路在用, 勿改)。
+# 映射键与生产一致 (0/4/5/6); 未映射的备用通道由 continuous_read 显示默认名 channel_N。
+# 注意: ch1..ch3 备用未接, 旧版此文件把它们标成主臂角/折臂角/臂长是错误标签, 勿再按列名读数。
+[spi_adc]
+iio_device_path = "/sys/bus/iio/devices/iio:device0"
+channel_count = 8
+# 观察用慢速轮询: 每通道间隔 10ms → 8 通道一轮 ~80ms (原 1ms 过快, 浮空通道数值易跳变)
+channel_interval_ms = 10
+data_timeout_ms = 100
+
+[spi_adc.channel_mapping]
+0 = "pin_force"
+4 = "main_boom_angle"
+5 = "fold_boom_angle"
+6 = "boom_length"

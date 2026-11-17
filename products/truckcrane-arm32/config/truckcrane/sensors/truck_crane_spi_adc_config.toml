@@ -1,0 +1,16 @@
+# 油压汽车吊 SPI ADC (AD7689 via Linux IIO) 配置 — 4 路模拟量通道
+# 与 loader/crane 的 SPI 配置分离部署, 勿合并; 钩头开关走独立 GPIO 配置。
+[spi_adc]
+iio_device_path = "/sys/bus/iio/devices/iio:device0"
+# 物理接线: ch0 提升油压(无杆腔) / ch1 有杆腔油压 / ch4 主臂水平夹角 / ch6 臂长
+# ch2/ch3/ch5/ch7 备用未接
+channel_count = 8
+channel_interval_ms = 10
+data_timeout_ms = 250
+
+# 通道映射键名必须与 qt-app-truckcrane acquisition_groups 注册表一致
+[spi_adc.channel_mapping]
+7 = "lift_pressure"
+6 = "rod_pressure"
+4 = "main_boom_angle"
+5 = "boom_length"

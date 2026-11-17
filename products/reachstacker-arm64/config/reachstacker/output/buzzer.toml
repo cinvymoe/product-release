@@ -1,0 +1,21 @@
+# Buzzer GPIO configuration
+# GPIO2_B5 on RK3568 → Linux GPIO pin 77
+
+[gpio]
+pin = 77
+
+[key_click]
+freq_hz = 2000
+duration_ms = 50
+
+[warning]
+freq_hz = 1000
+beep_ms = 500
+silence_ms = 500
+
+[alarm]
+freq_hz = 800
+
+[round_ready]
+freq_hz = 1000
+duration_ms = 300

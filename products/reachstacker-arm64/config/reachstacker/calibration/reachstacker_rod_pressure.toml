@@ -1,0 +1,7 @@
+# legacy: 正面吊回油（有杆腔侧）油压两点标定 (历史文件), 单位 MPa; 同进油口径。
+[calibration]
+zero_ad = 13000
+zero_value = 0.0
+scale_ad = 65535
+scale_value = 40.0
+calibrated = false

@@ -1,0 +1,14 @@
+# 油压汽车吊报警配置: 过载阈值 + 取消滞回 + 去抖 (值须与 alarm-core 内嵌默认一致)
+[overload]
+warning_pct = 90.0
+danger_pct = 100.0
+# 取消报警滞回带 (%): 触发后需 pct < 触发阈值 - clear_pct 才进入解除计数
+clear_pct = 5.0
+
+[debounce]
+trigger_count = 5
+clear_count = 10
+
+[debounce.per_source.sensor_fault]
+trigger_count = 1
+clear_count = 1

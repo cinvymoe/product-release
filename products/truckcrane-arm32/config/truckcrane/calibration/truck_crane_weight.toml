@@ -1,0 +1,14 @@
+# 油压汽车吊重量标定组：固定空载组 + 最多 9 个重物静态组。
+# 空载组经单步扫掠拟合 M_empty = a_nm·cos(theta)；重物组拟合 W = a·W_calc + b。
+# 出厂空载/重物均未标定，a=1、b=0 仅是恒等占位，不得视为有效标定产物。
+# 重物组由标定页以 [[weight.groups]] 数组表写入：id / known_weight_t /
+# w_calc_t（待标定时省略）/ calibrated；空载组不可删除，重物组最多 9 组。
+[weight]
+correction_a = 1.0
+correction_b = 0.0
+loaded_calibrated = false
+groups = []
+
+[weight.empty]
+calibrated = false
+a_nm = 0.0

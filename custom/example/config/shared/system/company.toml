@@ -1,0 +1,3 @@
+# 公司标识 —— 可选值见 crates/company-info/src/lib.rs 的 CompanyId 枚举
+# comnav = 上海司南导航 / seezol = 宜昌思卓
+company_id = "comnav"

@@ -1,0 +1,8 @@
+# 折臂吊多点重量标定 (ad ↔ t)
+# points 为标定点序列: ad = 称重传感器原始 AD 读数, value = 对应已知砝码重量 (吨)。
+# 校验: 至少 2 点, value 非负且有限, 排序后相邻 AD 互异; 保存时自动按 ad 升序排序。
+# 查询: 分段线性插值, 低于最低点/高于最高点钳制到端点值; calibrated=false 时视为未标定。
+# 由标定页写入, 手改仅限恢复出厂。
+[calibration]
+calibrated = false
+points = []

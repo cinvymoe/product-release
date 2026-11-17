@@ -1,0 +1,15 @@
+# MQTT OTA 配置 (出厂模板: release 部署 push-folding 以本文件覆盖设备副本, debug 部署跳过; 缺失时应用以代码默认值生成)
+[mqtt]
+# 服务器地址 (IP 直连, 避免设备 DNS 解析超时)
+host = "121.43.99.198"
+# MQTT 总开关 (仅 OTA 升级用途; false 时系统参数页 MQTT 卡与顶栏联网图标均隐藏)
+# 唯一连接门: ICCID/网络状态不参与该开关判定。
+enabled = false
+# Client ID (设备标识): 留空 = 出厂默认硬件 ID (FOLDING-XXXXXX; SoC 序列号优先、
+# 网卡 MAC 兜底, 两者皆无才由 mqtt_meta 持久化回退)。序列号来自 efuse, 跨重刷/删库不变。
+# 设置页可编辑, 「恢复默认」回填硬件 ID 并保存; 空白与历史占位值均按未配置处理。
+client_id = ""
+# 用户名
+username = "sz001"
+# 密码
+password = "b7$G2&rK9!sP4#vX6@z"

@@ -1,0 +1,23 @@
+# MQTT 上行配置 (出厂模板: release 部署 (PRODUCT=truckcrane) 以本文件覆盖设备副本, debug 部署跳过; 缺失时应用以代码默认值生成)
+# 连接用于 OTA 升级下载 + 实时数据遥测上传 (Supervisor run_with_writer 入口;
+# [telemetry].enabled=false 仅停遥测, OTA 不受影响)
+[mqtt]
+# 服务器地址 (IP 直连, 避免设备 DNS 解析超时)
+host = "121.43.99.198"
+# MQTT 总开关 (OTA + 遥测; true 时系统参数页 MQTT 卡与顶栏联网图标可见)
+enabled = true
+# Client ID 可现场编辑; 留空或占位值由应用回落出厂硬件 ID (TRUCKCRANE-XXXXXX;
+# SoC 序列号优先、MAC 兜底, 跨重刷/删库不变)
+client_id = ""
+# 用户名
+username = "sz001"
+# 密码
+password = "b7$G2&rK9!sP4#vX6@z"
+
+# 实时数据遥测 (重量/幅度/高度/实时传感器信息), 每 10 秒上报一次;
+# 老设备缺此段时按 enabled=false / interval_ms=10000 运行
+[telemetry]
+# 遥测开关 (false = MQTT 仅用于 OTA, 不上报遥测)
+enabled = false
+# 上报间隔 (ms; 下限 100, 配置更小值按 100 生效)
+interval_ms = 10000

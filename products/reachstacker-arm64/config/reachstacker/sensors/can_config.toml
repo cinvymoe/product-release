@@ -1,0 +1,96 @@
+# 正面吊 CAN 采集配置 (配置驱动通道映射, 参照 grabber)
+#
+# 协议口径 (下位机 2026-11-17 实机):
+#   帧 0x280 = 8 字节组合帧, 4 路 2 字节小端 u16 AD:
+#     byte 0..2 进油压力 AD | byte 2..4 回油压力 AD
+#     byte 4..6 大臂长度 AD | byte 6..8 大臂角度 AD
+#   帧 0x180 = 位置帧 (当前下位机恒发全零, 位置改由 0x280 携带)
+#   帧 0x480 = 4 路传感器状态位, 每路 1 字节: 0 = 该路离线 / 非 0 = 在线
+#
+# ★ 协议变更只改本文件, 无需改代码 (代码中禁止硬编码帧 ID / 字节偏移)。
+#   现场换传感器、调字节排布、把状态位从 B2/B3 挪到 B5/B6 都只动这里。
+#
+# 状态位闸门 (status_channel):
+#   每路数据通道用 `status_channel` 指向本文件里的状态位通道。状态帧新鲜时
+#   **以状态位为准** (0 = 离线, 非 0 = 在线), 数据帧在收但状态位为 0 时该路
+#   判离线 —— 安全称重链要求「状态位说了算」。状态帧尚未到达或已超时则退化为
+#   数据帧超时判定 (与 can-bus 固定三帧解析的 `!status_seen ||` 口径一致)。
+#
+# 通道键 = acquisition-pipeline 注册表键 (= 落库列名去 `_ad` 后缀),
+# 见 crates/qt-app-reachstacker/src/acquisition_groups.rs:
+#   main_boom_angle → main_boom_angle_ad | boom_length → boom_length_ad
+#   lift_pressure   → lift_pressure_ad   | rod_pressure → rod_pressure_ad
+
+[can]
+# CAN 接口名 (生产: can0, 开发验证: vcan0)
+interface = "can0"
+# socket 读超时 (ms)
+read_timeout_ms = 100
+# 数据帧超时 (ms): 超过此时长未收到该通道帧判离线
+data_timeout_ms = 3000
+
+# ========== 数据通道 (0x280 组合帧, 100ms 周期) ==========
+
+# 进油压力 AD: 0x280 byte 0..2 (u16)
+[can.channels.lift_pressure]
+can_id = 0x280
+byte_offset = 0
+status_channel = "lift_pressure_status"
+
+# 回油压力 AD: 0x280 byte 2..4 (u16)
+[can.channels.rod_pressure]
+can_id = 0x280
+byte_offset = 2
+status_channel = "rod_pressure_status"
+
+# 大臂长度 AD: 0x280 byte 4..6 (u16) — 大臂可伸缩, 两点标定见
+# calibration/reachstacker_boom_length.toml
+[can.channels.boom_length]
+can_id = 0x280
+byte_offset = 4
+status_channel = "boom_length_status"
+
+# 大臂角度 AD: 0x280 byte 6..8 (u16) — 两点标定见
+# calibration/reachstacker_main_boom_angle.toml
+[can.channels.main_boom_angle]
+can_id = 0x280
+byte_offset = 6
+status_channel = "main_boom_angle_status"
+
+# ========== 状态位通道 (0x480, 每路 1 字节, 100ms 周期) ==========
+# 0 = 该路传感器离线 / 非 0 = 在线。状态帧 100ms 周期, 组级超时 1s。
+#
+# ⚠ 下位机改版后如需把臂长/角度状态位挪到 B5/B6, 只改下面两处 byte_offset
+#   (数据通道的 status_channel 指向不用动)。
+
+# 进油压力传感器状态: 0x480 byte 0
+[can.channels.lift_pressure_status]
+can_id = 0x480
+byte_offset = 0
+byte_len = 1
+group = "status"
+
+# 回油压力传感器状态: 0x480 byte 1
+[can.channels.rod_pressure_status]
+can_id = 0x480
+byte_offset = 1
+byte_len = 1
+group = "status"
+
+# 大臂长度传感器状态: 0x480 byte 2
+[can.channels.boom_length_status]
+can_id = 0x480
+byte_offset = 2
+byte_len = 1
+group = "status"
+
+# 大臂角度传感器状态: 0x480 byte 3
+[can.channels.main_boom_angle_status]
+can_id = 0x480
+byte_offset = 3
+byte_len = 1
+group = "status"
+
+# 状态组级帧超时: 状态帧 100ms 周期, 1s 未收判该组状态位失效
+[can.groups.status]
+data_timeout_ms = 1000

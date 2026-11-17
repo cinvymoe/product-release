@@ -1,0 +1,9 @@
+# 油压汽车吊主臂角度两点标定 (zero=最小角度捕获点, scale=最大角度捕获点, 单位: 度)
+# 字段与 crane-algorithms AdConverter::convert(ad, zero_ad, zero_value, scale_ad, scale_value)
+# 入参逐字对齐; 由标定页写入, 手改仅限恢复出厂。全零 + calibrated=false 为待标定占位。
+[calibration]
+zero_ad = 0
+zero_value = 0.0
+scale_ad = 0
+scale_value = 0.0
+calibrated = false
