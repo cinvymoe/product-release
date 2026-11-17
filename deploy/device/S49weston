@@ -1,0 +1,75 @@
+#!/bin/sh -e
+### BEGIN INIT INFO
+# Provides:          weston
+# Required-Start:    mountvirtfs
+# Required-Stop:
+# Should-Start:
+# Should-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Linux weston daemon
+### END INIT INFO
+
+PATH="/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+. /etc/profile
+
+start_weston()
+{
+	/usr/bin/weston --shell=kiosk-shell.so&
+	
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		if [ -S /var/run/wayland-0 ]; then
+			break
+		fi
+		sleep 1
+	done
+	sleep 1
+
+	# 配置 CAN0 接口（原 S00can，内联此处避免串行阻塞 rcS）
+	CAN_IFACE="can0"
+	CAN_SETUP="/data/local/tmp/qt-rust-demo/can-setup"
+	CAN_STATE="/sys/class/net/${CAN_IFACE}/operstate"
+	if [ -x "$CAN_SETUP" ] && ! { [ -r "$CAN_STATE" ] && [ "$(cat "$CAN_STATE" 2>/dev/null)" = "up" ]; }; then
+		LD_LIBRARY_PATH=/usr/lib "$CAN_SETUP" "$CAN_IFACE" 250000
+	fi
+	
+	APP_DIR="/data/local/tmp/qt-rust-demo"
+	if [ -x "$APP_DIR/kiosk-launch.sh" ]; then
+		cd "$APP_DIR"
+		nohup sh "$APP_DIR/kiosk-launch.sh" > "$APP_DIR/startup.log" 2>&1 &
+	fi
+}
+
+stop_weston()
+{
+	killall qt-rust-demo qt-app-grabber qt-app-crane 2>/dev/null || true
+	killall weston
+}
+
+case "$1" in
+	start)
+		echo -n "starting weston... "
+		start_weston
+		echo "done."
+		;;
+	stop)
+		echo -n "stoping weston... "
+		stop_weston || true
+		echo "done."
+		;;
+	restart|reload)
+		echo -n "stoping weston... "
+		stop_weston && sleep .3
+		echo "done."
+
+		echo -n "starting weston... "
+		start_weston
+		echo "done."
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+esac
+
+exit 0

@@ -1,0 +1,19 @@
+# 装载机 GPIO 开关量输入配置
+# 使用 GPIO2_B4 (chip2, line 12) 和 GPIO2_B3 (chip2, line 11)
+[gpio_input]
+data_timeout_ms = 5000
+# 边沿事件轮询间隔: 20ms, 降低开关量边沿 -> 电平缓存延迟 (原 200ms)
+poll_timeout_ms = 20
+
+[gpio_input.pins.switch_1]
+chip = "/dev/gpiochip2"
+pin = 10
+edge = "both"
+# 内核去抖 5ms: 过滤接近开关弹跳/线缆 EMI 尖刺 (边沿驱动会看到每个毛刺)
+debounce_ms = 5
+
+[gpio_input.pins.switch_2]
+chip = "/dev/gpiochip2"
+pin = 9
+edge = "both"
+debounce_ms = 5

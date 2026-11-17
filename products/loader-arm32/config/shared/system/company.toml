@@ -1,0 +1,5 @@
+# 公司信息选择 (crates/company-info 内置注册表)
+# 可选值:
+#   comnav  - 上海司南导航技术股份有限公司 / ComNav Technology Ltd. (默认)
+#   seezol  - 宜昌思卓科技有限公司 / Yichang Seezol Technology Co., LTD (历史保留)
+company_id = "seezol"

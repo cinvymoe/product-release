@@ -1,0 +1,29 @@
+# RK3506B/J (ARM32) 固件清单
+#
+# 烧录策略: partition —— 按 parameter.txt 分区表逐分区写入, 不写 update.img。
+# ARM32 只有 maskrom 模式 (uboot 无 loader 模式); 必须断电重上电或按住 maskrom 键进入。
+
+[board]
+id       = "rk3506"
+soc      = "rk3506"
+arch     = "arm32"
+model    = "Vanxoak RK3506B/J IOT V1 Board"
+products = ["folding", "loader", "truckcrane"]
+
+[image]
+# 整包镜像 (仅 strategy=update 时使用; 分区模式不需要)
+file    = "update.img"
+# 分区镜像目录 (相对板型目录或绝对路径); 镜像不入 git
+dir     = "image"
+md5     = "b50f14b881bf811fe451f2f1b0d79bce"  # update.img (仅 update 策略校验)
+version = "2026-06-17"
+
+[flash]
+# maskrom: ARM32 唯一可用模式
+mode     = "maskrom"
+# partition: 按 parameter.txt 分区烧写 (推荐)
+strategy = "partition"
+# maskrom 引导文件 (相对镜像目录)
+loader   = "MiniLoaderAll.bin"
+# boot 分区镜像变体 (EMMC 带屏固件用 boot_emmc.img)
+boot     = "boot_emmc.img"

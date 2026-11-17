@@ -1,0 +1,83 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          qt-app-loader
+# Required-Start:
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Qt Rust Loader Application (ARM32 linuxfb, pre_init early start)
+### END INIT INFO
+
+# ARM32 (RK3506, linuxfb/DRM) 开机自启动脚本 (pre_init 早期启动版)
+# 与 LVGL demo 同级的 pre_init/S10 位置，在挂载/网络/udev 之前启动
+# 注意: pre_init 阶段 /userdata 尚未挂载 (S00mountall 在主 rcS 才执行)，
+#       而 /data 是指向 /userdata 的 symlink，因此本脚本先自行挂载。
+#
+# 安装: adb push scripts/pre_init-S10qt-app-loader-arm32 /etc/init.d/pre_init/S10qt-app-loader
+#       adb shell "chmod +x /etc/init.d/pre_init/S10qt-app-loader && sync"
+
+[ -z "$1" ] && set -- start
+
+APP_DIR="/data/local/tmp/qt-rust-demo"
+APP_BIN="$APP_DIR/qt-app-loader"
+RUN_SCRIPT="$APP_DIR/run.sh"
+LOG_FILE="$APP_DIR/startup.log"
+
+case "$1" in
+start)
+    # 已在运行则跳过
+    if pidof qt-app-loader >/dev/null 2>&1; then
+        echo "qt-app-loader already running"
+        exit 0
+    fi
+
+    # pre_init 阶段 /userdata 未挂载，先挂载 (后续 S00mountall 的 mount -a 会跳过已挂载项)
+    if ! grep -q ' /userdata ' /proc/mounts; then
+        mount /userdata 2>/dev/null || mount -t ext4 PARTLABEL=userdata /userdata
+    fi
+
+    echo "Starting qt-app-loader (linuxfb, pre_init)..."
+
+    if [ ! -x "$APP_BIN" ]; then
+        echo "Error: qt-app-loader not found or not executable at $APP_BIN"
+        exit 1
+    fi
+    if [ ! -f "$RUN_SCRIPT" ]; then
+        echo "Error: run.sh not found at $RUN_SCRIPT"
+        exit 1
+    fi
+
+    # run.sh 内含全部 linuxfb/DRM/字体环境变量
+    cd "$APP_DIR"
+    nohup sh "$RUN_SCRIPT" > "$LOG_FILE" 2>&1 &
+    echo "qt-app-loader started (PID: $!)"
+    ;;
+
+stop)
+    echo "Stopping qt-app-loader..."
+    killall qt-app-loader 2>/dev/null || true
+    echo "qt-app-loader stopped"
+    ;;
+
+restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+
+status)
+    if pidof qt-app-loader >/dev/null 2>&1; then
+        echo "qt-app-loader is running (PID: $(pidof qt-app-loader))"
+    else
+        echo "qt-app-loader is not running"
+        exit 1
+    fi
+    ;;
+
+*)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+
+exit 0

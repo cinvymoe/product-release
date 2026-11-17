@@ -1,0 +1,14 @@
+# 装载机 SPI ADC (AD7689 via Linux IIO) 配置 — 2 通道油压
+# 与 crane 的 spi_adc_config.toml (4 通道) 分离部署，勿合并
+[spi_adc]
+iio_device_path = "/sys/bus/iio/devices/iio:device0"
+# 油压传感器物理接线在 ch2(进油/大腔) ch3(回油/小腔)，ch0/ch1 悬空
+# channel_count 需覆盖到 ch3
+channel_count = 8
+channel_interval_ms = 1
+data_timeout_ms = 100
+
+# 通道映射键名必须与 LoaderSensorCollector 契约一致
+[spi_adc.channel_mapping]
+6 = "small_chamber_pressure_ad"
+7 = "big_chamber_pressure_ad"

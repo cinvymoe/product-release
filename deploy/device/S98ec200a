@@ -1,0 +1,459 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          ec200a
+# Required-Start:    $network
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: EC200A 4G modem autostart + watchdog (APN 可配, 默认 mobile)
+### END INIT INFO
+
+# EC200A 开机自动配置 + 常驻守护 (ARM32)
+# 后台执行: 等待模块就绪 → 关闭SIM热插拔检测(引脚不可靠) → 设置APN → 激活数据通路 → DHCP获取IP
+#           → 守护循环: 定期检查 SIM/注册/数据通路, 掉线自动重连 (含拔插SIM恢复)
+#           + 维护 config/device_iccid (AT+QCCID 落盘, MQTT client_id 数据源)
+# 日志: /tmp/ec200a-autostart.log
+#
+# 安装: adb push scripts/S98ec200a-arm32 /etc/init.d/S98ec200a
+#       adb shell "chmod +x /etc/init.d/S98ec200a && sync"
+#
+# APN 用法 (默认 mobile, 三级覆盖, 优先级从高到低):
+#   adb shell '/etc/init.d/S98ec200a set-apn szcat1'      # 持久化(写 /etc/ec200a-apn)+ 立即生效, 重启不丢
+#   adb shell 'EC200A_APN=szcat1 /etc/init.d/S98ec200a restart'   # 仅本次运行有效, 不落盘
+#   adb shell '/etc/init.d/S98ec200a --apn szcat1 restart'        # 同上, 等价写法(-a szcat1)
+#   恢复默认: adb shell '/etc/init.d/S98ec200a set-apn mobile'
+#   查看生效值: adb shell '/etc/init.d/S98ec200a status'
+
+# ---------- APN 配置 ----------
+# 生效值优先级: 命令行 --apn/-a > 环境变量 EC200A_APN > 持久化文件 $APN_FILE > $DEFAULT_APN
+DEFAULT_APN="mobile"
+APN_FILE=/etc/ec200a-apn
+APN="$DEFAULT_APN"
+APN_SOURCE="默认值"
+# ICCID 设备标识文件 (app 侧 <exe_dir>/config/device_iccid 同一文件; MQTT client_id 数据源)
+ICCID_FILE=/data/local/tmp/qt-rust-demo/config/device_iccid
+LOG=/tmp/ec200a-autostart.log
+PIDFILE=/tmp/ec200a-watchdog.pid
+
+# 注意: 本机 SIM_DET 引脚不可靠(悬空/读数跳变), 实测插卡状态 QSIMSTAT 读数与实物不一致。
+#       因此 QSIMDET 热插拔检测必须保持关闭, 拔插卡恢复靠守护循环: 轮询 CPIN + 限速 CFUN 复位。
+# 守护循环正常检查间隔 (秒)
+CHECK_INTERVAL=30
+# CFUN 复位最小间隔 (秒): 无卡时避免反复复位把模块打挂; 也决定插卡后最坏恢复时间 (~CFUN_MIN_GAP+25s)
+CFUN_MIN_GAP=120
+
+# ---------- 参数解析 ----------
+# 支持: <start|stop|restart|status|set-apn <APN>> [-a|--apn <APN>]
+APN_OVERRIDE=""
+CMD=""
+CMD_ARG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -a|--apn)
+            APN_OVERRIDE="$2"
+            shift 2 2>/dev/null || shift
+            ;;
+        --apn=*)
+            APN_OVERRIDE="${1#--apn=}"
+            shift
+            ;;
+        set-apn)
+            CMD="set-apn"
+            CMD_ARG="$2"
+            shift 2 2>/dev/null || shift
+            ;;
+        *)
+            if [ -z "$CMD" ]; then CMD="$1"; else CMD_ARG="$1"; fi
+            shift
+            ;;
+    esac
+done
+[ -z "$CMD" ] && CMD="start"
+[ -n "$APN_OVERRIDE" ] && EC200A_APN="$APN_OVERRIDE"
+[ -n "$EC200A_APN" ] && export EC200A_APN
+
+log() {
+    echo "$(date '+%H:%M:%S') $1" >> "$LOG"
+    # 日志限长: 超过 2000 行截断保留后 500 行
+    [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 2000 ] && tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+    return 0
+}
+
+# APN 字符校验: 只允许 AT+CGDCONT 里安全出现的字符
+valid_apn() {
+    case "$1" in
+        ''|*[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    [ "${#1}" -le 100 ] || return 1
+    return 0
+}
+
+# 解析生效 APN (幂等; 每次 configure/status 前调用)
+resolve_apn() {
+    if [ -n "$EC200A_APN" ]; then
+        APN="$EC200A_APN"
+        APN_SOURCE="环境变量/--apn"
+        return 0
+    fi
+    if [ -f "$APN_FILE" ]; then
+        _apn=$(tr -d '[:space:]' < "$APN_FILE" 2>/dev/null)
+        if valid_apn "$_apn"; then
+            APN="$_apn"
+            APN_SOURCE="$APN_FILE"
+            return 0
+        fi
+        [ -n "$_apn" ] && log "WARN: $APN_FILE 内容非法('$_apn'), 回退默认 $DEFAULT_APN"
+    fi
+    APN="$DEFAULT_APN"
+    APN_SOURCE="默认值"
+    return 0
+}
+
+# 发送AT指令并读取响应
+send_at() {
+    port="$1" cmd="$2"
+    stty -F "$port" 115200 raw -echo -echoe -echok -echoctl -echoke 2>/dev/null
+    dd if="$port" of=/dev/null bs=256 count=1 2>/dev/null &
+    flush_pid=$!
+    sleep 0.2
+    kill $flush_pid 2>/dev/null
+    wait $flush_pid 2>/dev/null
+    (
+        cat "$port" 2>/dev/null &
+        rpid=$!
+        sleep 0.2
+        printf '%s\r' "$cmd" > "$port"
+        sleep 1.5
+        kill $rpid 2>/dev/null
+        wait $rpid 2>/dev/null
+    ) 2>/dev/null | tr -d '\0' | grep -v "^$"
+}
+
+# 查找 AT 指令端口 (优先ttyUSB2); 找到则设置全局 AT_PORT, 返回 0
+find_at_port() {
+    AT_PORT=""
+    for p in /dev/ttyUSB2 /dev/ttyUSB1 /dev/ttyUSB3 /dev/ttyUSB0; do
+        [ -c "$p" ] || continue
+        if send_at "$p" "AT" | grep -q "OK"; then
+            AT_PORT="$p"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 幂等关闭 SIM 热插拔检测 (本机 SIM_DET 引脚不可靠; QSIMDET 写模块 flash, 仅在值不同才写)
+ensure_sim_detect() {
+    QD=$(send_at "$AT_PORT" "AT+QSIMDET?" | grep "+QSIMDET:" | awk -F: '{print $2}' | tr -d ' \r')
+    if [ "$QD" != "0,0" ]; then
+        send_at "$AT_PORT" "AT+QSIMDET=0,0" >/dev/null 2>&1
+        log "QSIMDET: $QD -> 0,0 (已禁用, SIM_DET 引脚不可靠)"
+    fi
+}
+
+# 查询 SIM CPIN 状态: READY 返回 0, 否则返回 1
+cpin_ready() {
+    send_at "$AT_PORT" "AT+CPIN?" | grep -q "+CPIN: READY"
+}
+
+# 维护 device_iccid: 卡就绪且 QCCID 有效 → 原子写(内容变化才写);
+# 卡不可用/格式非法 → 删除 (文件恒镜像当前插卡)。
+refresh_iccid() {
+    if ! cpin_ready; then
+        rm -f "$ICCID_FILE"
+        return 0
+    fi
+    ICCID=$(send_at "$AT_PORT" "AT+QCCID" | grep "+QCCID:" | awk '{print $2}' | tr -d '\r')
+    case "$ICCID" in
+        ''|*[!0-9]*) rm -f "$ICCID_FILE"; return 0 ;;
+    esac
+    if [ "${#ICCID}" -lt 19 ] || [ "${#ICCID}" -gt 20 ]; then
+        rm -f "$ICCID_FILE"
+        return 0
+    fi
+    if [ "$(cat "$ICCID_FILE" 2>/dev/null)" != "$ICCID" ]; then
+        mkdir -p "$(dirname "$ICCID_FILE")"
+        printf '%s\n' "$ICCID" > "$ICCID_FILE.tmp" && mv "$ICCID_FILE.tmp" "$ICCID_FILE"
+        log "ICCID 已更新: $ICCID"
+    fi
+}
+
+# 查询 LTE 注册状态码 (CEREG 第2字段): 1=归属 5=漫游
+query_cereg() {
+    send_at "$AT_PORT" "AT+CEREG?" | grep "+CEREG:" | awk -F: '{print $2}' | awk -F, '{print $2}' | tr -d ' \r'
+}
+
+# 数据通路是否健康: ECM 网卡有 IP 且 ping 通网关 (无网关则 ping 223.5.5.5)
+data_path_ok() {
+    ECM_IF=""
+    for iface in eth0 usb0; do
+        if ifconfig "$iface" >/dev/null 2>&1; then ECM_IF="$iface"; break; fi
+    done
+    [ -n "$ECM_IF" ] || return 1
+    IP_ADDR=$(ifconfig "$ECM_IF" 2>/dev/null | grep "inet addr" | awk -F: '{print $2}' | awk '{print $1}')
+    [ -n "$IP_ADDR" ] || return 1
+    GW=$(route -n 2>/dev/null | grep "^0.0.0.0" | awk '{print $2}' | head -1)
+    TARGET="${GW:-223.5.5.5}"
+    ping -c 1 -W 3 "$TARGET" >/dev/null 2>&1
+}
+
+# 激活数据通路: PDP → QNETDEVCTL → ECM 网卡 DHCP (含重试)
+activate_data_path() {
+    send_at "$AT_PORT" "AT+CGACT=1,1" >/dev/null 2>&1
+    sleep 2
+    ok=0
+    i=0
+    while [ $i -lt 5 ]; do
+        if send_at "$AT_PORT" "AT+QNETDEVCTL=1,1,1" | tail -1 | grep -q "OK"; then
+            ok=1
+            break
+        fi
+        log "QNETDEVCTL 第 $((i + 1)) 次未就绪, 5s 后重试"
+        sleep 5
+        i=$((i + 1))
+    done
+    if [ $ok -eq 0 ]; then
+        log "FAIL: QNETDEVCTL 激活失败"
+        return 1
+    fi
+    log "QNETDEVCTL=1,1,1 OK"
+    sleep 3
+
+    ECM_IF=""
+    for iface in eth0 usb0; do
+        if ifconfig "$iface" >/dev/null 2>&1; then ECM_IF="$iface"; break; fi
+    done
+    if [ -z "$ECM_IF" ]; then
+        log "FAIL: 未找到 ECM 网卡"
+        return 1
+    fi
+    ifconfig "$ECM_IF" down 2>/dev/null
+    sleep 1
+    ifconfig "$ECM_IF" up 2>/dev/null
+    sleep 1
+    if command -v udhcpc >/dev/null 2>&1; then
+        udhcpc -i "$ECM_IF" -t 5 -n >/dev/null 2>&1
+    elif command -v dhcpcd >/dev/null 2>&1; then
+        dhcpcd -t 10 "$ECM_IF" >/dev/null 2>&1
+    fi
+    sleep 1
+
+    IP_ADDR=$(ifconfig "$ECM_IF" 2>/dev/null | grep "inet addr" | awk -F: '{print $2}' | awk '{print $1}')
+    if [ -n "$IP_ADDR" ]; then
+        log "数据通路就绪: $ECM_IF IP=$IP_ADDR"
+        return 0
+    fi
+    log "FAIL: 未获取到 IP"
+    return 1
+}
+
+# 首次配置: 等模块 → 找 AT 口 → SIM 检测配置 → APN → 数据通路
+configure_ec200a() {
+    resolve_apn
+    log "=== EC200A configure (APN=$APN, 来源: $APN_SOURCE) ==="
+
+    # 1. 等待 ttyUSB 端口出现 (模块启动慢, 最多等 60s)
+    i=0
+    while [ $i -lt 30 ]; do
+        TTY_LIST=$(ls /dev/ttyUSB* 2>/dev/null)
+        [ -n "$TTY_LIST" ] && break
+        sleep 2
+        i=$((i + 1))
+    done
+    if [ -z "$TTY_LIST" ]; then
+        log "FAIL: 60s 内未检测到 ttyUSB 端口"
+        return 1
+    fi
+    log "ttyUSB 就绪: $(echo $TTY_LIST | tr '\n' ' ')"
+
+    # 2. 查找 AT 端口 (最多 5 轮)
+    round=0
+    while [ $round -lt 5 ]; do
+        find_at_port && break
+        sleep 3
+        round=$((round + 1))
+    done
+    if [ -z "$AT_PORT" ]; then
+        log "FAIL: 未找到 AT 端口"
+        return 1
+    fi
+    log "AT 端口: $AT_PORT"
+
+    # 3. SIM 热插拔检测 (幂等)
+    ensure_sim_detect
+
+    # 4. 等 SIM 就绪 (最多 ~60s; 无卡则放弃留给守护循环)
+    i=0
+    while [ $i -lt 12 ]; do
+        cpin_ready && break
+        sleep 5
+        i=$((i + 1))
+    done
+    if ! cpin_ready; then
+        log "SIM 未就绪, 进入守护循环等待插卡"
+        return 1
+    fi
+
+    # ICCID 落盘 (开机尽早, 不等数据通路; 换卡由守护循环刷新)
+    refresh_iccid
+
+    # 5. 设置 APN (与当前不同才更新)
+    CGDCONT=$(send_at "$AT_PORT" "AT+CGDCONT?" | grep "+CGDCONT: 1,")
+    CURRENT_APN=$(echo "$CGDCONT" | awk -F\" '{print $4}')
+    [ -z "$CURRENT_APN" ] && CURRENT_APN=$(echo "$CGDCONT" | awk -F\" '{print $2}')
+    if [ "$APN" != "$CURRENT_APN" ]; then
+        log "切换 APN: $CURRENT_APN -> $APN"
+        send_at "$AT_PORT" "AT+QNETDEVCTL=0,1,0" >/dev/null 2>&1
+        sleep 1
+        send_at "$AT_PORT" "AT+CGACT=0,1" >/dev/null 2>&1
+        sleep 1
+        send_at "$AT_PORT" "AT+CGDCONT=1,\"IP\",\"$APN\"" >/dev/null 2>&1
+        sleep 1
+    else
+        log "APN 已是 $APN"
+    fi
+
+    # 6. 激活 PDP + 数据通路 + DHCP
+    activate_data_path
+}
+
+# 守护循环: 掉线/拔插卡自动恢复
+watchdog_loop() {
+    configure_ec200a
+    last_cfun=0
+    sleep "$CHECK_INTERVAL"
+
+    while true; do
+        # 端口可能在 CFUN 复位/模块重启后消失, 每轮重找
+        if ! find_at_port; then
+            log "AT 端口不可用, 10s 后重试"
+            sleep 10
+            continue
+        fi
+
+        # ICCID 维护 (换卡刷新 / 拔卡删除; 文件恒镜像当前插卡)
+        refresh_iccid
+
+        # SIM 异常 (拔卡/卡故障) → 限速 CFUN 复位强制重新初始化 SIM
+        # (本机 SIM_DET 不可靠, 无法靠模块自动检测插卡, 只能复位重读)
+        if ! cpin_ready; then
+            now=$(date +%s)
+            if [ $((now - last_cfun)) -ge "$CFUN_MIN_GAP" ]; then
+                log "CPIN 未就绪, CFUN 复位模块尝试重读 SIM"
+                send_at "$AT_PORT" "AT+CFUN=1,1" >/dev/null 2>&1
+                last_cfun=$now
+                sleep 25
+            else
+                sleep 10
+            fi
+            continue
+        fi
+
+        CEREG_STAT=$(query_cereg)
+        if [ "$CEREG_STAT" != "1" ] && [ "$CEREG_STAT" != "5" ]; then
+            # 未注册: 正在搜网, 短间隔再查
+            sleep 15
+            continue
+        fi
+
+        if ! data_path_ok; then
+            log "数据通路中断, 重新激活 (CEREG=$CEREG_STAT)"
+            activate_data_path
+        fi
+
+        sleep "$CHECK_INTERVAL"
+    done
+}
+
+case "$CMD" in
+start)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        echo "ec200a watchdog already running (pid $(cat "$PIDFILE"))"
+        exit 0
+    fi
+    echo "Starting EC200A watchdog (background, log: $LOG)..."
+    # 后台子进程必须重定向 stdio: 否则 adb shell 会因继承的 stdout 未关闭而挂住不返回
+    (
+        trap 'rm -f "$PIDFILE"; exit 0' TERM INT
+        while true; do
+            watchdog_loop
+            log "watchdog_loop 异常退出, 30s 后重启"
+            sleep 30
+        done
+    ) >/dev/null 2>&1 &
+    echo $! > "$PIDFILE"
+    ;;
+
+stop)
+    echo "Stopping EC200A watchdog..."
+    if [ -f "$PIDFILE" ]; then
+        _pid=$(cat "$PIDFILE" 2>/dev/null)
+        if [ -n "$_pid" ]; then
+            kill "$_pid" 2>/dev/null
+            # 等进程真正退出: 其 TERM trap 也会 rm pidfile, 抢在 restart 新写之前完成
+            i=0
+            while [ $i -lt 5 ] && kill -0 "$_pid" 2>/dev/null; do
+                sleep 1
+                i=$((i + 1))
+            done
+            # busybox sh 在 sleep 等前台命令结束前不执行 trap, TERM 可能滞后 → 兜底强杀
+            kill -0 "$_pid" 2>/dev/null && kill -9 "$_pid" 2>/dev/null && sleep 1
+        fi
+        rm -f "$PIDFILE"
+    fi
+    # 兜底: pidfile 丢失(历史竞态)时按命令行清理, 避免 restart 后双守护抢 AT 口
+    # 用 -9 强杀: 这些进程可能正卡在 sleep 30 里, TERM 要等到 sleep 返回才生效
+    for _p in $(ps 2>/dev/null | grep "S98ec200a start" | grep -v grep | awk '{print $1}'); do
+        [ "$_p" = "$$" ] && continue
+        kill -9 "$_p" 2>/dev/null
+    done
+    sleep 1
+    for p in /dev/ttyUSB2 /dev/ttyUSB1 /dev/ttyUSB3 /dev/ttyUSB0; do
+        [ -c "$p" ] || continue
+        send_at "$p" "AT+QNETDEVCTL=0,1,0" >/dev/null 2>&1 && break
+    done
+    echo "done"
+    ;;
+
+status)
+    resolve_apn
+    echo "APN(生效): $APN  [来源: $APN_SOURCE | 默认: $DEFAULT_APN | 文件: $APN_FILE]"
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        echo "watchdog running (pid $(cat "$PIDFILE"))"
+    else
+        # pidfile 缺失时按命令行兜底判断 (与 stop 的兜底清理一致)
+        _pids=$(ps 2>/dev/null | grep "S98ec200a start" | grep -v grep | awk '{print $1}' | tr '\n' ' ')
+        if [ -n "$_pids" ]; then
+            echo "watchdog running but pidfile missing (pid: $_pids)"
+        else
+            echo "watchdog NOT running"
+        fi
+    fi
+    tail -20 "$LOG" 2>/dev/null || echo "no log yet"
+    ;;
+
+set-apn)
+    if ! valid_apn "$CMD_ARG"; then
+        echo "用法: $0 set-apn <APN>   (允许字符: A-Z a-z 0-9 . _ -; 示例: $0 set-apn szcat1)"
+        exit 1
+    fi
+    printf '%s\n' "$CMD_ARG" > "$APN_FILE"
+    sync
+    echo "APN 已持久化: $CMD_ARG -> $APN_FILE (重启/重装不丢)"
+    echo "重启守护使其立即生效 ..."
+    EC200A_APN='' "$0" restart
+    ;;
+
+restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+
+*)
+    echo "Usage: $0 [--apn <APN>] {start|stop|restart|status|set-apn <APN>}"
+    exit 1
+    ;;
+esac
+
+exit 0

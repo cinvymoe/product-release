@@ -1,0 +1,141 @@
+# 全局日志配置文件
+# 
+# 此文件用于控制应用程序的日志输出行为
+# 可以为每个模块/文件单独设置日志级别
+
+# 默认日志级别（可选值: trace, debug, info, warn, error, off）
+default_level = "info"
+
+# crane_algorithms 日志（AD转换、校准、力矩计算）
+[[modules]]
+module = "crane_algorithms"
+level = "warn"
+
+# crane_algorithms::calibration AD转换日志
+[[modules]]
+module = "crane_algorithms::calibration"
+level = "warn"
+
+# crane_algorithms::chassis_params 重量计算日志
+[[modules]]
+module = "crane_algorithms::chassis_params"
+level = "warn"
+
+# crane_algorithms::config 载荷表配置日志
+[[modules]]
+module = "crane_algorithms::config"
+level = "warn"
+
+# sensor_core 日志
+[[modules]]
+module = "sensor_core"
+level = "error"
+
+# sensor_core::calibration 校准日志
+[[modules]]
+module = "sensor_core::calibration"
+level = "error"
+
+# sensor_core::calibration::sensor_calibration
+[[modules]]
+module = "sensor_core::calibration::sensor_calibration"
+level = "error"
+
+# pipeline_application 日志
+[[modules]]
+module = "pipeline_application"
+level = "error"
+
+# pipeline_application::stages 日志
+[[modules]]
+module = "pipeline_application::stages"
+level = "error"
+
+# qt_rust_demo::reducers 日志
+[[modules]]
+module = "qt_rust_demo::reducers"
+level = "warn"
+
+# config_hot_reload 日志
+[[modules]]
+module = "config_hot_reload"
+level = "warn"
+
+# config_core 日志
+[[modules]]
+module = "config_core"
+level = "warn"
+
+# 是否输出到控制台
+console_output = true
+
+# 是否输出到文件
+file_output = false
+
+# SPI-ADC 数据源日志
+[[modules]]
+module = "sensor_core::source::factory"
+level = "debug"
+
+# 采集管道日志
+[[modules]]
+module = "qt_rust_demo::pipeline::collection_pipeline"
+level = "debug"
+
+# 日志文件路径（当 file_output = true 时生效）
+log_file = "logs/app.log"
+
+# CAN bus 日志（warn 级别）
+# [[modules]]
+# module = "can_bus"
+# level = "warn"
+
+# MonitoringViewModel 日志（开启 trace 级别）
+# [[modules]]
+# module = "qt_rust_demo::monitoring_viewmodel"
+# level = "trace"
+
+# # Intent 和 Reducer 日志
+# [[modules]]
+# module = "qt_rust_demo::intents::*"
+# level = "debug"
+
+# [[modules]]
+# module = "qt_rust_demo::reducers::*"
+# level = "debug"
+
+# # 显示管道日志
+# [[modules]]
+# module = "qt_rust_demo::pipeline::display_pipeline"
+# level = "debug"
+
+# 只显示 PipelineManager 的日志
+# [[modules]]
+# module = "qt_rust_demo::pipeline::pipeline_manager"
+# level = "trace"
+
+# # 采集管道日志
+# [[modules]]
+# module = "qt_rust_demo::pipeline::collection_pipeline"
+# level = "trace"
+
+# # 存储管道日志
+# [[modules]]
+# module = "qt_rust_demo::pipeline::storage_pipeline"
+# level = "trace"
+# 
+# [[modules]]
+# module = "qt_rust_demo::pipeline::*"
+# level = "debug"
+# 
+# [[modules]]
+# module = "qt_rust_demo::repositories::*"
+# level = "info"
+# 
+# [[modules]]
+# module = "qt_rust_demo::data_sources::*"
+# level = "debug"
+# 
+# [[modules]]
+# module = "qt_rust_demo::viewmodels::*"
+# level = "info"

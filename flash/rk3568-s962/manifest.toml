@@ -1,0 +1,24 @@
+# rk3568-s962 — ARM64 板固件清单 (grabber / crane / reachstacker)
+#
+# 固件本体随仓库放在本目录 update.img（不入 git，见 .gitignore），
+# 烧录全程只读本地文件，不访问网络、不依赖编译机/远端主机。
+# 烧录: make flash PRODUCT=grabber   (arm64 走 adb reboot loader + upgrade_tool uf)
+#
+# 来源记录（构建信息，仅备查；换固件时同步更新 md5 与 version）:
+#   RK3568 S962 Buildroot，boot.img 2026-06-02 / rootfs 2026-05-22，内核 5.10.160
+#   由 update.img 整包（1,276,271,178 B）导出后放入本目录
+
+[board]
+id    = "rk3568-s962"
+soc   = "rk3568"
+arch  = "arm64"
+model = "Rockchip RK3568 ARMT S962 Board"
+products = ["grabber", "reachstacker"]
+
+[image]
+file    = "update.img"
+md5     = "ba22e595ca83a6998eecd3fe0db995bb"
+version = "2026-06-02"
+
+[flash]
+mode = "loader"

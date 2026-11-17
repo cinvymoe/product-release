@@ -1,0 +1,87 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          qt-app-folding
+# Required-Start:
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Qt Rust Folding Crane Application (ARM32 linuxfb, pre_init early start)
+### END INIT INFO
+
+# ARM32 (RK3506, linuxfb/DRM) 折臂吊 qt-app-folding 开机自启动脚本 (pre_init 早期启动版)
+# 与 LVGL demo 同级的 pre_init/S10 位置，在挂载/网络/udev 之前启动
+# 注意: pre_init 阶段 /userdata 尚未挂载 (S00mountall 在主 rcS 才执行)，
+#       而 /data 是指向 /userdata 的 symlink，因此本脚本先自行挂载。
+#
+# 环境变量内联自 Makefile run-folding 目标 (不依赖设备 run.sh — 那是 loader 的启动脚本)
+#
+# 安装: adb push scripts/pre_init-S10qt-app-folding-arm32 /etc/init.d/pre_init/S10qt-app-folding
+#       adb shell "chmod +x /etc/init.d/pre_init/S10qt-app-folding && sync"
+
+[ -z "$1" ] && set -- start
+
+APP_DIR="/data/local/tmp/qt-rust-demo"
+APP_BIN="$APP_DIR/qt-app-folding"
+LOG_FILE="$APP_DIR/folding_run.log"
+
+case "$1" in
+start)
+    # 已在运行则跳过
+    if pidof qt-app-folding >/dev/null 2>&1; then
+        echo "qt-app-folding already running"
+        exit 0
+    fi
+
+    # pre_init 阶段 /userdata 未挂载，先挂载 (后续 S00mountall 的 mount -a 会跳过已挂载项)
+    if ! grep -q ' /userdata ' /proc/mounts; then
+        mount /userdata 2>/dev/null || mount -t ext4 PARTLABEL=userdata /userdata
+    fi
+
+    echo "Starting qt-app-folding (linuxfb, pre_init)..."
+
+    if [ ! -x "$APP_BIN" ]; then
+        echo "Error: qt-app-folding not found or not executable at $APP_BIN"
+        exit 1
+    fi
+
+    # linuxfb/DRM/QML 环境变量 (与 Makefile run-folding 保持一致)
+    export LD_LIBRARY_PATH="$APP_DIR/lib:$LD_LIBRARY_PATH"
+    export QT_PLUGIN_PATH="$APP_DIR/plugins"
+    export QT_QPA_PLATFORM_PLUGIN_PATH="$APP_DIR/plugins"
+    export QT_QPA_PLATFORM="linuxfb:fb=/dev/fb0"
+    export QT_QPA_FB_DRM=1
+    export QML2_IMPORT_PATH="$APP_DIR/qml_modules"
+
+    cd "$APP_DIR" || exit 1
+    nohup "$APP_BIN" > "$LOG_FILE" 2>&1 &
+    echo "qt-app-folding started (PID: $!)"
+    ;;
+
+stop)
+    echo "Stopping qt-app-folding..."
+    killall qt-app-folding 2>/dev/null || true
+    echo "qt-app-folding stopped"
+    ;;
+
+restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+
+status)
+    if pidof qt-app-folding >/dev/null 2>&1; then
+        echo "qt-app-folding is running (PID: $(pidof qt-app-folding))"
+    else
+        echo "qt-app-folding is not running"
+        exit 1
+    fi
+    ;;
+
+*)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+
+exit 0

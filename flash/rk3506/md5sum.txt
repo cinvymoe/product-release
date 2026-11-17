@@ -1,0 +1,10 @@
+e7065b9553761796784fad0d6150a966  parameter.txt
+f69d68c922b50f0c467e55d2787ccef9  uboot.img
+f4f35d60b3cc18aaa6d8d92f0cd3708a  misc.img
+81135144a1a1f12ec7776f0ddb34d506  boot_emmc.img
+340e389ca06e15e70320c46720f11e63  boot.img
+cc0f3035c83753df274fd901913409b5  recovery.img
+ddcb7da7508d2966490dfd0f6a94ab48  rootfs.img
+7c530e3d3d66bdbed27854357f30c860  oem.img
+9e878b77411a792d0d54278141f8e183  userdata.img
+1ab2fd500abf47aff5e34ac391c3a771  MiniLoaderAll.bin
