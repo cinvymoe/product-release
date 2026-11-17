@@ -48,6 +48,30 @@ product-release/
 └── artifacts/                   制品通道（.gitignore 整目录，仅留 MANIFEST.sha256）
 ```
 
+## 产品自定义（公司 / APN / MQTT）
+
+`custom/example/` 是模板，按客户复制一份：
+
+```bash
+cp -r custom/example custom/acme
+# 改 custom/acme/config/shared/system/company.toml 的 company_id
+# 改 custom/acme/config/<product>/<product>_mqtt.toml 的凭据
+# 改 custom/acme/apn 的内容
+```
+
+部署时带 `--custom acme`（Windows `-Custom acme`），脚本会：
+
+1. 把 `custom/acme/config/` 逐文件覆盖到设备 `config/` 下
+2. 把 `custom/acme/apn` 写进设备 `/etc/ec200a-apn`
+
+| 文件 | 作用 | 出厂默认 |
+|---|---|---|
+| `config/shared/system/company.toml` | 公司标识（`comnav` / `seezol`） | 见 `products/*/config/shared/system/` |
+| `config/<product>/*mqtt*.toml` | MQTT 服务器与凭据 | `sz001`（owner 2026-11-17 确认沿用） |
+| `apn` | 4G APN | `mobile` |
+
+`custom/<代号>/` 已加入 `.gitignore`（只有 `example/` 入 git），真实凭据不会进仓。
+
 ## 制品通道（内网 NAS）
 
 `artifacts/` 下的大文件不入 git，由 `deploy/lib/sync.sh` 按 `artifacts/MANIFEST.sha256` 拉取并校验。配置来源三选一：
