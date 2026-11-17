@@ -1,0 +1,9 @@
+# 制品通道来源配置 —— 复制为 artifacts/nas.conf 并按现场填写 (nas.conf 不入 git)
+#
+# 二选一:
+#   ARTIFACTS_URL="//nas.local/release/product-release"     # SMB 共享 (Linux 走 smbclient)
+#   ARTIFACTS_URL="file:///mnt/nas/release/product-release" # 已挂载的本地路径
+#   ARTIFACTS_MOUNT="/mnt/nas/release/product-release"      # 已挂载的本地路径 (优先于 URL)
+#
+# Windows 侧用 -Url "\\nas\release\product-release" 或映射盘符 Z:\ 传给 sync.ps1。
+ARTIFACTS_URL="//nas.local/release/product-release"

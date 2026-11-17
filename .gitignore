@@ -1,3 +1,5 @@
 # 制品通道 —— 大文件不入 git, 由 deploy/lib/sync.sh 从 NAS 拉取
 /artifacts/**
 !/artifacts/.gitkeep
+!/artifacts/MANIFEST.sha256
+!/artifacts/*.example
