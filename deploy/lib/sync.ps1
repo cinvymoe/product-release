@@ -7,9 +7,10 @@
     按 artifacts\MANIFEST.sha256 逐项拉取 update.img / 产品运行时 / USB 升级包，并校验 sha256。
 
     NAS 来源（优先级从高到低）：
-      1. -Url 参数或 $env:ARTIFACTS_URL  —— \\nas\share\product-release 或映射盘符
+      1. -Url 参数或 $env:ARTIFACTS_URL  —— \\192.168.110.96\product-release 或映射盘符
       2. -Mount 参数或 $env:ARTIFACTS_MOUNT —— 已映射的本地路径，如 Z:\product-release
       3. artifacts\nas.conf 中的 ARTIFACTS_URL
+      4. (全无) 内置默认 NAS —— \\192.168.110.96\product-release（内网，匿名只读）
 
 .PARAMETER Only
     flash | products | (省略=全部)
@@ -21,7 +22,8 @@
     只列清单
 
 .EXAMPLE
-    .\deploy\lib\sync.ps1 -Url \\nas\release\product-release
+    .\deploy\lib\sync.ps1                      # 用 artifacts\nas.conf 的默认 NAS
+    .\deploy\lib\sync.ps1 -Url \\192.168.110.96\product-release
 
 .EXAMPLE
     .\deploy\lib\sync.ps1 -Only flash -Verify
@@ -56,6 +58,12 @@ if (-not $Url -and -not $Mount -and (Test-Path $nasConf)) {
 }
 if (-not $Url -and $env:ARTIFACTS_URL) { $Url = $env:ARTIFACTS_URL }
 if (-not $Mount -and $env:ARTIFACTS_MOUNT) { $Mount = $env:ARTIFACTS_MOUNT }
+
+# 内网默认制品通道 —— 全新 clone 未做任何配置时也能直接 sync。
+if (-not $Url -and -not $Mount) {
+    $Url = '\\192.168.110.96\product-release'
+    Write-Warn2 "未指定制品来源，使用默认 NAS: $Url"
+}
 
 $Src = if ($Mount) { $Mount } else { $Url }
 if (-not $Src) { throw '未配置制品来源：用 -Url / -Mount，或设置 $env:ARTIFACTS_URL，或写 artifacts\nas.conf' }

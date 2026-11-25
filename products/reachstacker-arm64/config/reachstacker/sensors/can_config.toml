@@ -5,7 +5,12 @@
 #     byte 0..2 进油压力 AD | byte 2..4 回油压力 AD
 #     byte 4..6 大臂长度 AD | byte 6..8 大臂角度 AD
 #   帧 0x180 = 位置帧 (当前下位机恒发全零, 位置改由 0x280 携带)
-#   帧 0x480 = 4 路传感器状态位, 每路 1 字节: 0 = 该路离线 / 非 0 = 在线
+#   帧 0x480 = 传感器状态位, 每路 1 字节: 0 = 该路离线 / 非 0 = 在线
+#     现行布局: byte0 进油 / byte1 回油 / byte5 臂长 / byte6 角度
+#     (owner 2026-11-17: 下位机把臂长/角度状态位改到 B5/B6, 避开 B2/B3)
+#
+#   帧 0x281 = 下位机旁路帧, **不解析** (owner 2026-11-18 裁决: 不需要解析),
+#     本文件不配置该 ID, 解析器无该帧分支; 收到也只计入接收计数, 不进采集通道。
 #
 # ★ 协议变更只改本文件, 无需改代码 (代码中禁止硬编码帧 ID / 字节偏移)。
 #   现场换传感器、调字节排布、把状态位从 B2/B3 挪到 B5/B6 都只动这里。
@@ -60,8 +65,11 @@ status_channel = "main_boom_angle_status"
 # ========== 状态位通道 (0x480, 每路 1 字节, 100ms 周期) ==========
 # 0 = 该路传感器离线 / 非 0 = 在线。状态帧 100ms 周期, 组级超时 1s。
 #
-# ⚠ 下位机改版后如需把臂长/角度状态位挪到 B5/B6, 只改下面两处 byte_offset
-#   (数据通道的 status_channel 指向不用动)。
+# 布局 (owner 2026-11-17 定): 进油 B0 / 回油 B1 / 臂长 B5 / 角度 B6。
+# 下位机再挪状态位只改对应 byte_offset (数据通道的 status_channel 指向不用动)。
+#
+# ⚠ 帧长必须覆盖所用最高字节: 用 B6 则 0x480 至少 7 字节。帧短于配置偏移时
+#   该状态位通道收不到值 → 闸门退化为数据帧超时判定 (不会误判在线)。
 
 # 进油压力传感器状态: 0x480 byte 0
 [can.channels.lift_pressure_status]
@@ -77,17 +85,17 @@ byte_offset = 1
 byte_len = 1
 group = "status"
 
-# 大臂长度传感器状态: 0x480 byte 2
+# 大臂长度传感器状态: 0x480 byte 5
 [can.channels.boom_length_status]
 can_id = 0x480
-byte_offset = 2
+byte_offset = 5
 byte_len = 1
 group = "status"
 
-# 大臂角度传感器状态: 0x480 byte 3
+# 大臂角度传感器状态: 0x480 byte 6
 [can.channels.main_boom_angle_status]
 can_id = 0x480
-byte_offset = 3
+byte_offset = 6
 byte_len = 1
 group = "status"
 

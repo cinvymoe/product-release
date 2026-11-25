@@ -2,7 +2,7 @@
   "product": "qt-app-truckcrane",
   "arch": "arm32",
   "version": "1.0.6",
-  "timestamp": "2026-11-17T09:05:52.635859+00:00",
+  "timestamp": "2026-11-25T08:14:24.397646+00:00",
   "runtime_root": "artifacts/products/truckcrane-arm32/runtime",
   "files": [
     {
@@ -2715,7 +2715,7 @@
     },
     {
       "path": "qt-app-truckcrane",
-      "sha256": "65f1d9c507c888c578139b9056234dc3c1bfabf19f2c42980ffd687316d53dc0"
+      "sha256": "9332a25d262c7fd250ecb138469c3a2097d1f5d0f3893bcb562029cb84c14a34"
     }
   ]
 }

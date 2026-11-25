@@ -12,6 +12,7 @@
 #   1. $ARTIFACTS_URL         —— 如 //nas/products 或 smb://nas/products 或 file:///mnt/nas
 #   2. $ARTIFACTS_MOUNT       —— 已挂载的本地路径, 如 /mnt/nas/product-release
 #   3. 仓库内 artifacts/nas.conf 的 ARTIFACTS_URL (交付端可改成本地 NAS 地址)
+#   4. (全无) 内置默认 NAS     —— //192.168.110.96/product-release (内网, 匿名只读)
 #
 # 校验: artifacts/MANIFEST.sha256 逐行 "<sha256>  <相对路径>", 与 rsync/scp 后实测比对。
 # 退出码: 0 成功 / 1 参数或清单错误 / 2 下载失败 / 3 校验失败
@@ -46,6 +47,14 @@ NAS_CONF="$REPO_ROOT/artifacts/nas.conf"
 if [ -z "${ARTIFACTS_URL:-}" ] && [ -z "${ARTIFACTS_MOUNT:-}" ] && [ -f "$NAS_CONF" ]; then
 	# shellcheck disable=SC1090
 	. "$NAS_CONF"
+fi
+
+# 内网默认制品通道 —— 全新 clone 未做任何配置时也能直接 sync。
+# 覆盖优先级: ARTIFACTS_MOUNT > ARTIFACTS_URL > artifacts/nas.conf > 本默认值
+DEFAULT_ARTIFACTS_URL="//192.168.110.96/product-release"
+if [ -z "${ARTIFACTS_URL:-}" ] && [ -z "${ARTIFACTS_MOUNT:-}" ]; then
+	ARTIFACTS_URL="$DEFAULT_ARTIFACTS_URL"
+	info "未指定制品来源, 使用默认 NAS: $ARTIFACTS_URL"
 fi
 
 SRC=""

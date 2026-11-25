@@ -1,9 +1,14 @@
 # 制品通道来源配置 —— 复制为 artifacts/nas.conf 并按现场填写 (nas.conf 不入 git)
 #
+# 只在「要换 NAS」时才需要建这个文件:
+#   sync.sh / sync.ps1 内置默认 NAS = 192.168.110.96 (匿名只读共享名 product-release),
+#   什么都不配也能直接 sync; 本文件的作用是覆盖那个默认值。
+#
 # 二选一:
-#   ARTIFACTS_URL="//nas.local/release/product-release"     # SMB 共享 (Linux 走 smbclient)
+#   ARTIFACTS_URL="//192.168.110.96/product-release"        # SMB 共享 (Linux 走 smbclient)
 #   ARTIFACTS_URL="file:///mnt/nas/release/product-release" # 已挂载的本地路径
 #   ARTIFACTS_MOUNT="/mnt/nas/release/product-release"      # 已挂载的本地路径 (优先于 URL)
 #
-# Windows 侧用 -Url "\\nas\release\product-release" 或映射盘符 Z:\ 传给 sync.ps1。
-ARTIFACTS_URL="//nas.local/release/product-release"
+# 共享根 = 发布仓 artifacts/ 的内容: flash/ 与 products/ 直接位于共享根下。
+# Windows 侧用 -Url "\\192.168.110.96\product-release" 或映射盘符 Z:\ 传给 sync.ps1。
+ARTIFACTS_URL="//192.168.110.96/product-release"

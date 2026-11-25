@@ -74,11 +74,20 @@ cp -r custom/example custom/acme
 
 ## 制品通道（内网 NAS）
 
-`artifacts/` 下的大文件不入 git，由 `deploy/lib/sync.sh` 按 `artifacts/MANIFEST.sha256` 拉取并校验。配置来源三选一：
+`artifacts/` 下的大文件不入 git，由 `deploy/lib/sync.sh` / `sync.ps1` 按 `artifacts/MANIFEST.sha256` 拉取并校验。配置来源三选一：
 
-1. 环境变量 `ARTIFACTS_URL`（`//nas/share/product-release` 或 `file:///mnt/nas/...`）
+1. 环境变量 `ARTIFACTS_URL`（`//192.168.110.96/product-release` 或 `file:///mnt/nas/...`）
 2. 环境变量 `ARTIFACTS_MOUNT`（已挂载的本地路径）
 3. 仓库内 `artifacts/nas.conf`（交付端自行填写，不覆盖）
+
+**默认 NAS = `192.168.110.96`**，SMB 共享名 `product-release`，匿名只读（无需账号密码）。两个脚本都内置了这个默认值 —— **什么都不配也能直接 sync**（脚本会打印 `使用默认 NAS: …`），只有要换 NAS 时才需要上面三种配置之一：
+
+| 端 | 地址 |
+| --- | --- |
+| Linux | `ARTIFACTS_URL="//192.168.110.96/product-release"`（走 `smbclient -N`） |
+| Windows | `-Url "\\192.168.110.96\product-release"` 或直接访问 `\\192.168.110.96\product-release` |
+
+共享根就是 `artifacts/` 的内容 —— `flash/` 与 `products/` 直接位于共享根下，**不是**仓库根。
 
 ## 构建端
 

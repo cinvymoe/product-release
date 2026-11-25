@@ -2,7 +2,7 @@
   "product": "qt-app-grabber",
   "arch": "arm64",
   "version": "1.0.6",
-  "timestamp": "2026-11-17T09:06:08.171448+00:00",
+  "timestamp": "2026-11-25T08:14:41.728065+00:00",
   "runtime_root": "artifacts/products/grabber-arm64/runtime",
   "files": [
     {
@@ -2871,7 +2871,7 @@
     },
     {
       "path": "qt-app-grabber",
-      "sha256": "8520b39d1394a81683ab8d3900032b6e8cd8c282c00da11497d342d621b38b09"
+      "sha256": "048e0fb209a3456f04c9f1cff0567ec588b53d86ae093f91ca15b80ac7d9baf6"
     }
   ]
 }
