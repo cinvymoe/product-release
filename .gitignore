@@ -7,3 +7,6 @@
 # 客户自定义实例不入 git (只留模板)
 /custom/*
 !/custom/example/
+# 运行时自动解压的工具目录 (保留 zip 即可, 解压产物不提交)
+/tools/windows/platform-tools/
+/tools/windows/upgrade_tool_v2.46_for_window/
