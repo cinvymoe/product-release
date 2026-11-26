@@ -58,7 +58,7 @@ fi
 DEFAULT_ARTIFACTS_URL="http://192.168.110.96:8080/product-release"
 if [ -z "${ARTIFACTS_URL:-}" ] && [ -z "${ARTIFACTS_MOUNT:-}" ]; then
 	ARTIFACTS_URL="$DEFAULT_ARTIFACTS_URL"
-	info "未指定制品来源, 使用默认 NAS: $ARTIFACTS_URL"
+	info "未指定制品来源, 使用默认制品通道: $ARTIFACTS_URL"
 fi
 
 SRC=""
