@@ -8,11 +8,15 @@
 #   ./deploy/lib/sync.sh --list               # 只列清单, 不下载
 #   ./deploy/lib/sync.sh --verify             # 只校验本地已有文件的 sha256
 #
-# NAS 来源 (优先级从高到低):
-#   1. $ARTIFACTS_URL         —— 如 //nas/products 或 smb://nas/products 或 file:///mnt/nas
+# 制品来源 (优先级从高到低):
+#   1. $ARTIFACTS_URL         —— http(s)://host:8080/product-release / //host/share / file:///mnt/nas
 #   2. $ARTIFACTS_MOUNT       —— 已挂载的本地路径, 如 /mnt/nas/product-release
-#   3. 仓库内 artifacts/nas.conf 的 ARTIFACTS_URL (交付端可改成本地 NAS 地址)
-#   4. (全无) 内置默认 NAS     —— //192.168.110.96/product-release (内网, 匿名只读)
+#   3. 仓库内 artifacts/nas.conf 的 ARTIFACTS_URL (交付端可改成本地地址)
+#   4. (全无) 内置默认        —— http://192.168.110.96:8080/product-release (内网, 匿名只读)
+#
+# 为什么默认走 HTTP 而不是 SMB: Windows 10 1709+/11 默认 AllowInsecureGuestAuth=0,
+# 客户端直接拒绝匿名 SMB 来宾访问 ("组织的安全策略阻止未经身份验证的来宾访问"), 服务端无法绕过。
+# HTTP 与 SMB 两条通道都可用, 数据是同一份目录。
 #
 # 校验: artifacts/MANIFEST.sha256 逐行 "<sha256>  <相对路径>", 与 rsync/scp 后实测比对。
 # 退出码: 0 成功 / 1 参数或清单错误 / 2 下载失败 / 3 校验失败
@@ -51,7 +55,7 @@ fi
 
 # 内网默认制品通道 —— 全新 clone 未做任何配置时也能直接 sync。
 # 覆盖优先级: ARTIFACTS_MOUNT > ARTIFACTS_URL > artifacts/nas.conf > 本默认值
-DEFAULT_ARTIFACTS_URL="//192.168.110.96/product-release"
+DEFAULT_ARTIFACTS_URL="http://192.168.110.96:8080/product-release"
 if [ -z "${ARTIFACTS_URL:-}" ] && [ -z "${ARTIFACTS_MOUNT:-}" ]; then
 	ARTIFACTS_URL="$DEFAULT_ARTIFACTS_URL"
 	info "未指定制品来源, 使用默认 NAS: $ARTIFACTS_URL"
@@ -63,9 +67,10 @@ if [ -n "${ARTIFACTS_MOUNT:-}" ]; then
 elif [ -n "${ARTIFACTS_URL:-}" ]; then
 	case "$ARTIFACTS_URL" in
 		file://*) SRC="${ARTIFACTS_URL#file://}" ;;
+		http://*|https://*) SRC="$ARTIFACTS_URL" ;;  # 走 curl 分支
 		/*)       SRC="$ARTIFACTS_URL" ;;
 		smb://*|//*) SRC="$ARTIFACTS_URL" ;;  # 走 smbclient 分支
-		*) die "ARTIFACTS_URL 协议不支持: $ARTIFACTS_URL (支持 file:// 本地路径 / smb:// / //host/share)" 1 ;;
+		*) die "ARTIFACTS_URL 协议不支持: $ARTIFACTS_URL (支持 http(s):// / file:// 本地路径 / smb:// / //host/share)" 1 ;;
 	esac
 fi
 
@@ -120,11 +125,36 @@ info "待同步: ${#selected[@]} 个文件"
 mkdir -p "$ARTIFACTS_DIR"
 
 fail=0
-if [[ "$SRC" == smb://* || "$SRC" == //* ]]; then
+if [[ "$SRC" == http://* || "$SRC" == https://* ]]; then
+	command -v curl >/dev/null || die "需要 curl" 1
+	base="${SRC%/}"
+	for line in "${selected[@]}"; do
+		want="${line%%  *}"; rel="${line#*  }"
+		if verify_one "$want" "$rel" >/dev/null 2>&1; then
+			echo "  · $rel 已是最新"; continue
+		fi
+		mkdir -p "$ARTIFACTS_DIR/$(dirname "$rel")"
+		# 先试断点续传 (服务端支持 Range); 失败则删掉重下一次。
+		# 本地文件比远端大时 curl -C - 会拿到 416, 正是靠这条重下兜底。
+		if curl -fS --retry 3 --retry-delay 2 -C - -o "$ARTIFACTS_DIR/$rel" "$base/$rel" 2>/dev/null; then
+			echo "  ✓ $rel"
+		else
+			rm -f "$ARTIFACTS_DIR/$rel"
+			if curl -fS --retry 3 --retry-delay 2 -o "$ARTIFACTS_DIR/$rel" "$base/$rel" 2>/dev/null; then
+				echo "  ✓ $rel"
+			else
+				echo "  ✗ $rel"; fail=1
+			fi
+		fi
+	done
+elif [[ "$SRC" == smb://* || "$SRC" == //* ]]; then
 	command -v smbclient >/dev/null || die "需要 smbclient (apt install smbclient)" 1
 	share="$SRC"; [ "${share#//}" = "$share" ] && share="//${SRC#smb://}"
 	for line in "${selected[@]}"; do
-		rel="${line#*  }"
+		want="${line%%  *}"; rel="${line#*  }"
+		if verify_one "$want" "$rel" >/dev/null 2>&1; then
+			echo "  · $rel 已是最新"; continue
+		fi
 		mkdir -p "$ARTIFACTS_DIR/$(dirname "$rel")"
 		if smbclient "$share" -N -c "get \"$rel\" \"$ARTIFACTS_DIR/$rel\"" >/dev/null 2>&1; then
 			echo "  ✓ $rel"
@@ -135,7 +165,10 @@ if [[ "$SRC" == smb://* || "$SRC" == //* ]]; then
 else
 	[ -d "$SRC" ] || die "来源路径不存在: $SRC" 1
 	for line in "${selected[@]}"; do
-		rel="${line#*  }"
+		want="${line%%  *}"; rel="${line#*  }"
+		if verify_one "$want" "$rel" >/dev/null 2>&1; then
+			echo "  · $rel 已是最新"; continue
+		fi
 		mkdir -p "$ARTIFACTS_DIR/$(dirname "$rel")"
 		if rsync -a --partial "$SRC/$rel" "$ARTIFACTS_DIR/$rel"; then
 			echo "  ✓ $rel"

@@ -76,16 +76,18 @@ cp -r custom/example custom/acme
 
 `artifacts/` 下的大文件不入 git，由 `deploy/lib/sync.sh` / `sync.ps1` 按 `artifacts/MANIFEST.sha256` 拉取并校验。配置来源三选一：
 
-1. 环境变量 `ARTIFACTS_URL`（`//192.168.110.96/product-release` 或 `file:///mnt/nas/...`）
+1. 环境变量 `ARTIFACTS_URL`（`http://192.168.110.96:8080/product-release` / `//192.168.110.96/product-release` / `file:///mnt/nas/...`）
 2. 环境变量 `ARTIFACTS_MOUNT`（已挂载的本地路径）
 3. 仓库内 `artifacts/nas.conf`（交付端自行填写，不覆盖）
 
-**默认 NAS = `192.168.110.96`**，SMB 共享名 `product-release`，匿名只读（无需账号密码）。两个脚本都内置了这个默认值 —— **什么都不配也能直接 sync**（脚本会打印 `使用默认 NAS: …`），只有要换 NAS 时才需要上面三种配置之一：
+**默认制品通道 = `192.168.110.96`**。两个脚本都内置了默认值 —— **什么都不配也能直接 sync**（脚本会打印 `使用默认制品通道: …`），只有要换地址时才需要上面三种配置之一。同一份目录对外有两种协议：
 
-| 端 | 地址 |
-| --- | --- |
-| Linux | `ARTIFACTS_URL="//192.168.110.96/product-release"`（走 `smbclient -N`） |
-| Windows | `-Url "\\192.168.110.96\product-release"` 或直接访问 `\\192.168.110.96\product-release` |
+| 协议 | 地址 | 说明 |
+| --- | --- | --- |
+| **HTTP（默认）** | `http://192.168.110.96:8080/product-release` | 只读、匿名，无需任何客户端配置 |
+| SMB（可选） | `\\192.168.110.96\product-release` | 只读匿名共享，Linux 走 `smbclient -N` |
+
+**为什么默认走 HTTP**：Windows 10 1709+ / Windows 11 默认 `AllowInsecureGuestAuth = 0`，客户端会直接拒绝匿名 SMB 来宾访问，报「你不能访问此共享文件夹，因为你组织的安全策略阻止未经身份验证的来宾访问」（0x80070569）。这是**客户端策略**，服务端怎么配都绕不过去（实测服务端日志里连一个 session 都没有）。HTTP 没有这层限制。
 
 共享根就是 `artifacts/` 的内容 —— `flash/` 与 `products/` 直接位于共享根下，**不是**仓库根。
 

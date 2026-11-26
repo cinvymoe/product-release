@@ -1,14 +1,18 @@
 # 制品通道来源配置 —— 复制为 artifacts/nas.conf 并按现场填写 (nas.conf 不入 git)
 #
-# 只在「要换 NAS」时才需要建这个文件:
-#   sync.sh / sync.ps1 内置默认 NAS = 192.168.110.96 (匿名只读共享名 product-release),
+# 只在「要换通道」时才需要建这个文件:
+#   sync.sh / sync.ps1 内置默认通道 = http://192.168.110.96:8080/product-release (只读匿名),
 #   什么都不配也能直接 sync; 本文件的作用是覆盖那个默认值。
 #
-# 二选一:
-#   ARTIFACTS_URL="//192.168.110.96/product-release"        # SMB 共享 (Linux 走 smbclient)
-#   ARTIFACTS_URL="file:///mnt/nas/release/product-release" # 已挂载的本地路径
-#   ARTIFACTS_MOUNT="/mnt/nas/release/product-release"      # 已挂载的本地路径 (优先于 URL)
+# 三选一:
+#   ARTIFACTS_URL="http://192.168.110.96:8080/product-release"   # HTTP (默认, 无需客户端配置)
+#   ARTIFACTS_URL="//192.168.110.96/product-release"             # SMB 共享 (Linux 走 smbclient)
+#   ARTIFACTS_URL="file:///mnt/nas/release/product-release"      # 已挂载的本地路径
+#   ARTIFACTS_MOUNT="/mnt/nas/release/product-release"           # 已挂载的本地路径 (优先于 URL)
 #
+# 为什么默认是 HTTP 不是 SMB: Windows 10 1709+/11 默认 AllowInsecureGuestAuth=0,
+# 客户端直接拒绝匿名 SMB 来宾访问 ("组织的安全策略阻止未经身份验证的来宾访问"), 服务端绕不过。
 # 共享根 = 发布仓 artifacts/ 的内容: flash/ 与 products/ 直接位于共享根下。
-# Windows 侧用 -Url "\\192.168.110.96\product-release" 或映射盘符 Z:\ 传给 sync.ps1。
-ARTIFACTS_URL="//192.168.110.96/product-release"
+# Windows 用 -Url "http://192.168.110.96:8080/product-release";
+# 若已放行来宾登录, 也可用 -Url "\\192.168.110.96\product-release" 或映射盘符 Z:\。
+ARTIFACTS_URL="http://192.168.110.96:8080/product-release"

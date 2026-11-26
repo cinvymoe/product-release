@@ -6,11 +6,15 @@
 .DESCRIPTION
     按 artifacts\MANIFEST.sha256 逐项拉取 update.img / 产品运行时 / USB 升级包，并校验 sha256。
 
-    NAS 来源（优先级从高到低）：
-      1. -Url 参数或 $env:ARTIFACTS_URL  —— \\192.168.110.96\product-release 或映射盘符
+    制品来源（优先级从高到低）：
+      1. -Url 参数或 $env:ARTIFACTS_URL  —— http(s)://host:8080/... / \\host\share / 映射盘符
       2. -Mount 参数或 $env:ARTIFACTS_MOUNT —— 已映射的本地路径，如 Z:\product-release
       3. artifacts\nas.conf 中的 ARTIFACTS_URL
-      4. (全无) 内置默认 NAS —— \\192.168.110.96\product-release（内网，匿名只读）
+      4. (全无) 内置默认 —— http://192.168.110.96:8080/product-release（内网，匿名只读）
+
+    为什么默认走 HTTP 而不是 SMB：Windows 10 1709+/11 默认 AllowInsecureGuestAuth=0，
+    客户端直接拒绝匿名 SMB 来宾访问（提示「组织的安全策略阻止未经身份验证的来宾访问」），
+    该策略在客户端，服务端无法绕过。HTTP 与 SMB 两条通道指向同一份目录。
 
 .PARAMETER Only
     flash | products | (省略=全部)
@@ -22,8 +26,9 @@
     只列清单
 
 .EXAMPLE
-    .\deploy\lib\sync.ps1                      # 用 artifacts\nas.conf 的默认 NAS
-    .\deploy\lib\sync.ps1 -Url \\192.168.110.96\product-release
+    .\deploy\lib\sync.ps1                      # 内置默认: http://192.168.110.96:8080/product-release
+    .\deploy\lib\sync.ps1 -Url http://192.168.110.96:8080/product-release
+    .\deploy\lib\sync.ps1 -Url \\192.168.110.96\product-release   # 走 SMB（需来宾登录放行）
 
 .EXAMPLE
     .\deploy\lib\sync.ps1 -Only flash -Verify
@@ -61,8 +66,8 @@ if (-not $Mount -and $env:ARTIFACTS_MOUNT) { $Mount = $env:ARTIFACTS_MOUNT }
 
 # 内网默认制品通道 —— 全新 clone 未做任何配置时也能直接 sync。
 if (-not $Url -and -not $Mount) {
-    $Url = '\\192.168.110.96\product-release'
-    Write-Warn2 "未指定制品来源，使用默认 NAS: $Url"
+    $Url = 'http://192.168.110.96:8080/product-release'
+    Write-Warn2 "未指定制品来源，使用默认制品通道: $Url"
 }
 
 $Src = if ($Mount) { $Mount } else { $Url }
@@ -84,11 +89,17 @@ if (-not $entries) { throw "清单中没有匹配 -Only=$Only 的条目" }
 if ($List) { $entries | ForEach-Object { $_.Rel }; exit 0 }
 
 function Test-One {
-    param($e)
+    param($e, [switch]$Quiet)
     $local = Join-Path $Artifacts $e.Rel
-    if (-not (Test-Path $local)) { Write-Host "  缺失: $($e.Rel)"; return $false }
+    if (-not (Test-Path $local)) {
+        if (-not $Quiet) { Write-Host "  缺失: $($e.Rel)" }
+        return $false
+    }
     $got = (Get-FileHash -Path $local -Algorithm SHA256).Hash.ToLower()
-    if ($got -ne $e.Sha256.ToLower()) { Write-Host "  不匹配: $($e.Rel)"; return $false }
+    if ($got -ne $e.Sha256.ToLower()) {
+        if (-not $Quiet) { Write-Host "  不匹配: $($e.Rel)" }
+        return $false
+    }
     return $true
 }
 
@@ -104,16 +115,37 @@ Write-Host "制品来源: $Src"
 Write-Host "待同步: $($entries.Count) 个文件"
 
 $fail = 0
+$isHttp = $Src -match '^https?://'
+if ($isHttp) {
+    # PS 5.1 的 Invoke-WebRequest 一旦画进度条就慢到不可用，必须关掉
+    $ProgressPreference = 'SilentlyContinue'
+    $HttpBase = $Src.TrimEnd('/')
+}
+
 foreach ($e in $entries) {
     $local = Join-Path $Artifacts $e.Rel
     $dir = Split-Path -Parent $local
+
+    if (Test-One $e -Quiet) { Write-Host "  · $($e.Rel) 已是最新"; continue }
+
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 
-    $remote = Join-Path $Src $e.Rel
-    if (-not (Test-Path $remote)) {
-        Write-Host "  !! 来源缺失: $($e.Rel)"; $script:fail = 1; continue
+    if ($isHttp) {
+        $u = "$HttpBase/$($e.Rel -replace '\\', '/')"
+        try {
+            Invoke-WebRequest -Uri $u -OutFile $local -UseBasicParsing
+        } catch {
+            Write-Host "  !! 下载失败 $($e.Rel): $($_.Exception.Message)"
+            $script:fail = 1
+            continue
+        }
+    } else {
+        $remote = Join-Path $Src $e.Rel
+        if (-not (Test-Path $remote)) {
+            Write-Host "  !! 来源缺失: $($e.Rel)"; $script:fail = 1; continue
+        }
+        Copy-Item -Path $remote -Destination $local -Force
     }
-    Copy-Item -Path $remote -Destination $local -Force
     if (Test-One $e) { Write-Ok $e.Rel } else { $script:fail = 1 }
 }
 
