@@ -87,17 +87,29 @@ function Write-Step([string]$msg) { Write-Host ""; Write-Host "== $msg ==" -Fore
 function Write-Ok([string]$msg)   { Write-Host "  OK $msg" -ForegroundColor Green }
 function Write-Warn2([string]$msg){ Write-Host "  !! $msg" -ForegroundColor Yellow }
 
+# 注意: 参数名不能用 $Args —— 那是 PowerShell 的自动变量, 同名会让外部命令收不到参数
+# (upgrade_tool 只打印帮助并 exit 0, 脚本却当成"烧录完成"), 故一律叫 $ArgList。
 function Invoke-Cmd {
-    param([string]$Exe, [string[]]$Args)
-    if ($DryRun) { Write-Host "  [dry-run] $Exe $($Args -join ' ')" ; return }
-    & $Exe @Args
-    if ($LASTEXITCODE -ne 0) { throw "$Exe 失败 (exit $LASTEXITCODE)" }
+    param([string]$Exe, [string[]]$ArgList)
+    Write-Host "  -> $Exe $($ArgList -join ' ')"
+    if ($DryRun) { return '' }
+    $out = & $Exe @ArgList 2>&1 | ForEach-Object { "$_" }
+    $code = $LASTEXITCODE
+    $out | ForEach-Object { Write-Host "     $_" }
+    if ($code -ne 0) { throw "$Exe 失败 (exit $code)" }
+    return ($out -join "`n")
 }
 
 function Invoke-Adb {
-    param([string[]]$Args)
-    if ($DryRun) { Write-Host "  [dry-run] adb $($Args -join ' ')" ; return }
-    & adb @Args 2>&1 | Out-Null
+    param([string[]]$ArgList, [switch]$AllowFail)
+    if ($DryRun) { Write-Host "  [dry-run] adb $($ArgList -join ' ')" ; return '' }
+    $out = & adb @ArgList 2>&1 | ForEach-Object { "$_" }
+    $code = $LASTEXITCODE
+    if ($code -ne 0) {
+        if ($AllowFail) { return ($out -join "`n") }
+        throw "adb $($ArgList -join ' ') 失败 (exit $code): $($out -join ' | ')"
+    }
+    return ($out -join "`n")
 }
 
 Write-Host "=================================================================="
@@ -176,12 +188,28 @@ if ($SkipFlash) {
             if ($a -ne 'y') { throw '用户取消' }
         }
     }
-    Invoke-Cmd $tool @('uf', $img)
+    # 显式传参 (不再经 Invoke-Cmd 的数组参数), 并把工具输出打出来 + 校验它真的说成功了
+    Write-Host "  -> $tool uf $img"
+    $flashOut = & $tool 'uf' $img 2>&1 | ForEach-Object { "$_" }
+    $flashCode = $LASTEXITCODE
+    $flashOut | ForEach-Object { Write-Host "     $_" }
+    if ($flashCode -ne 0) { throw "upgrade_tool uf 失败 (exit $flashCode)" }
+    if (($flashOut -join "`n") -notmatch '(?i)(ok|成功)') {
+        throw "upgrade_tool 没有报告烧录成功 (输出里找不到 ok)。多半是板子没进入 maskrom —— 先手动跑 tools\windows\upgrade_tool.exe LD 看设备是否显示 Maskrom"
+    }
     Write-Ok '烧录完成'
 }
 
 # ---- 4 出厂擦除 ----
 Write-Step '[4/7] 出厂擦除 (purge-data)'
+# 烧录后板子应已重启进系统; adb 里看不到设备 = 烧录没生效 (还停在 maskrom) 或 USB 掉了。
+# 这一关必须在擦除/推送之前过, 否则后面几步会全部"假成功"。
+if (-not $DryRun) {
+    $state = (& adb get-state 2>&1 | Out-String).Trim()
+    if ($state -ne 'device') {   # 成功时 adb get-state 恰好输出 device; 失败是 error: no devices/emulators found
+        throw "adb 看不到设备 (adb get-state 返回 '$state') — 板子可能仍停在 maskrom 或未重启: 断电重上电, 等系统起来后再跑 -SkipFlash"
+    }
+}
 Invoke-Adb @('shell', "killall $crate 2>/dev/null || true")
 Invoke-Adb @('shell', "rm -rf $DeviceDir/config $DeviceDir/lib $DeviceDir/plugins $DeviceDir/qml_modules $DeviceDir/fonts")
 Invoke-Adb @('shell', "rm -rf $DataDir")
@@ -275,12 +303,13 @@ if ($DryRun) {
 }
 
 Write-Host '  重启设备并等待首帧…'
-& adb reboot 2>&1 | Out-Null
+Invoke-Adb @('reboot') | Out-Null
 Start-Sleep -Seconds 45
 for ($i = 1; $i -le 12; $i++) {
-    $pid = (& adb shell "pidof $crate" 2>&1 | Out-String).Trim()
-    if ($pid) {
-        Write-Ok "冷启动验收通过: $crate 已运行 (PID $pid)"
+    # $pid 是 PowerShell 的自动变量 (进程 ID, 只读), 不能拿来赋值
+    $appPid = (Invoke-Adb @('shell', "pidof $crate") -AllowFail).Trim()
+    if ($appPid) {
+        Write-Ok "冷启动验收通过: $crate 已运行 (PID $appPid)"
         Write-Host ''
         Write-Ok "=== 出厂部署完成: $Product ($arch) ==="
         exit 0
