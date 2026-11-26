@@ -91,6 +91,17 @@ cp -r custom/example custom/acme
 
 共享根就是 `artifacts/` 的内容 —— `flash/` 与 `products/` 直接位于共享根下，**不是**仓库根。
 
+## 编码约定（Windows 脚本）
+
+`deploy/factory-deploy.ps1` 与 `deploy/lib/sync.ps1` **必须保存为 UTF-8 with BOM**。
+
+原因：Windows PowerShell 5.1 对无 BOM 的文件按系统 ANSI 代码页（中文机器上是 GBK）解码。
+一旦 BOM 丢了，所有中文串会变成 `缂哄皯鍒跺搧鐩綍` 这种乱码，其中某些字节还会变成引号,
+把字符串提前截断 → 整份脚本 `ParserError`，报的却是 `缺少右"}"`、`"||"不是有效语句分隔符`
+这类完全不相干的错误（2026-11-26 实发）。PowerShell 7 无 BOM 也能读，所以这个坑只在 5.1 上出现。
+
+改脚本时别用会丢 BOM 的编辑器/脚本（例如 `python open(w, encoding='utf-8')` 会丢）。
+
 ## 构建端
 
 发布内容由主仓 `rust_crane` 的 `scripts/release-stage.sh` 生成：

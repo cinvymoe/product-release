@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     factory-deploy.ps1 — Windows 出厂部署（只支持 factory 流程）

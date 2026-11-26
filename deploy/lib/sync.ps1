@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     sync.ps1 — 从内网 NAS 拉取制品通道的大文件（Windows 交付端）
